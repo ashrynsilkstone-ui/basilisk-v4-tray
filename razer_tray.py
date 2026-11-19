@@ -5,14 +5,30 @@ from time import monotonic
 
 from dbus import DBusException
 from openrazer.client import DaemonNotFound, DeviceManager
-from PySide6.QtCore import ClassInfo, QObject, QRectF, Qt, QThread, QTimer, Signal, Slot
-from PySide6.QtDBus import QDBusAbstractAdaptor, QDBusConnection, QDBusMessage
-from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
-from PySide6.QtWidgets import (
-    QApplication, QColorDialog, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
-    QGridLayout, QGroupBox, QHBoxLayout, QLabel, QMenu, QPushButton, QSpinBox,
-    QSystemTrayIcon, QTabWidget, QVBoxLayout, QWidget,
-)
+
+try:
+    from PySide6.QtCore import ClassInfo, QObject, QRectF, Qt, QThread, QTimer, Signal, Slot
+    from PySide6.QtDBus import QDBus, QDBusAbstractAdaptor, QDBusConnection, QDBusMessage
+    from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+    from PySide6.QtWidgets import (
+        QApplication, QColorDialog, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
+        QGridLayout, QGroupBox, QHBoxLayout, QLabel, QMenu, QPushButton, QSpinBox,
+        QSystemTrayIcon, QTabWidget, QVBoxLayout, QWidget,
+    )
+except ModuleNotFoundError as error:
+    if not (error.name or "").startswith("PySide6"):
+        raise
+    from PyQt6.QtCore import QObject, QRectF, Qt, QThread, QTimer
+    from PyQt6.QtCore import pyqtClassInfo
+    from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
+    from PyQt6.QtDBus import QDBus, QDBusAbstractAdaptor, QDBusConnection, QDBusMessage
+    from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
+    from PyQt6.QtWidgets import (
+        QApplication, QColorDialog, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
+        QGridLayout, QGroupBox, QHBoxLayout, QLabel, QMenu, QPushButton, QSpinBox,
+        QSystemTrayIcon, QTabWidget, QVBoxLayout, QWidget,
+    )
+    ClassInfo = None
 
 
 NAME = "Basilisk V4 Pro"
@@ -525,11 +541,16 @@ class Tray(QObject):
         self.thread.wait()
 
 
-@ClassInfo(**{"D-Bus Interface": DESKTOP_ID})
 class TrayLauncher(QDBusAbstractAdaptor):
     @Slot()
     def OpenSettings(self):
         self.parent().open_settings()
+
+
+if ClassInfo is not None:
+    TrayLauncher = ClassInfo(**{"D-Bus Interface": DESKTOP_ID})(TrayLauncher)
+else:
+    TrayLauncher = pyqtClassInfo("D-Bus Interface", DESKTOP_ID)(TrayLauncher)
 
 
 def main():
@@ -547,7 +568,7 @@ def main():
     if not bus.registerService(DESKTOP_ID):
         if open_settings:
             request = QDBusMessage.createMethodCall(DESKTOP_ID, BUS_PATH, DESKTOP_ID, "OpenSettings")
-            reply = bus.call(request, timeout=2000)
+            reply = bus.call(request, QDBus.CallMode.Block, 2000)
             if reply.type() == QDBusMessage.MessageType.ErrorMessage:
                 logging.error("Einstellungsfenster öffnen: %s", reply.errorMessage())
                 return 1

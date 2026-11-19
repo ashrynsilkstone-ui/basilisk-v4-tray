@@ -1,0 +1,12 @@
+Package: basilisk-v4-tray
+Version: @VERSION@
+Architecture: all
+Section: utils
+Priority: optional
+Maintainer: Basilisk V4 Tray <349477269+ashrynsilkstone-ui@users.noreply.github.com>
+Depends: python3 (>= 3.9), python3-dbus, python3-openrazer, python3-pyqt6 | python3-pyside6.qtwidgets, python3-pyqt6 | python3-pyside6.qtdbus, qt6-wayland
+Homepage: https://github.com/ashrynsilkstone-ui/basilisk-v4-tray
+Description: KDE tray status and settings for the Razer Basilisk V4 Pro
+ Watch battery, DPI stage and polling rate on a HyperSpeed-connected mouse.
+ The settings dialog controls DPI stages, polling, power and per-zone lighting
+ through a compatible OpenRazer driver and daemon.

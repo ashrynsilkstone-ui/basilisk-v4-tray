@@ -1,29 +1,69 @@
-# Basilisk V4 Pro im KDE-Systemtray
+# Basilisk V4 Pro Tray for KDE
 
-Die Tray-App zeigt Akkustand, aktive DPI-Stufe und Pollingrate einer Razer Basilisk V4 Pro am HyperSpeed-Dongle (`1532:00E3`) an. Die Zahl im Symbol steht für die DPI-Stufe, der Balken für den Akku. Im Tooltip und Kontextmenü stehen alle drei Werte.
+[Deutsch](README.de.md) · [Installation packages](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases)
 
-Im Einstellungsfenster lassen sich DPI-Stufen, Pollingrate, Akku-Warnschwelle und Ruhezustand ändern. Der Reiter **Beleuchtung** steuert Helligkeit, Farbe und Effekt von Logo, Scrollrad und Unterboden separat.
+See the battery level, active DPI stage and polling rate of a Razer Basilisk V4 Pro connected through its HyperSpeed receiver (`1532:00E3`). The number in the tray icon is the DPI stage and the bar is the battery level. Hover over the icon or open its context menu for all three readings.
 
-## Voraussetzungen
+Click the icon to open the settings. You can configure up to five DPI stages with separate X and Y values, select the active stage and polling rate, and adjust the low-battery warning and sleep timeout. On the **Beleuchtung** tab, the logo, scroll wheel and underglow each have their own brightness and effect. The available effects are off, static color, color cycling and wave.
 
-- KDE Plasma mit einer laufenden D-Bus-Benutzersitzung
-- OpenRazer mit Unterstützung für die Basilisk V4 Pro und ihre Unterbodenbeleuchtung
-- Python 3 mit PySide6, dbus-python und der passenden OpenRazer-Clientbibliothek. Unter CachyOS und Arch heißen die Pakete `pyside6`, `python-dbus` und `python-openrazer`.
+## Requirements
 
-## Start und Installation
+- A KDE Plasma session with a working user D-Bus and system tray
+- OpenRazer's kernel driver, daemon and matching Python client with support for the **Basilisk V4 Pro HyperSpeed receiver**. Separate underglow controls require the corresponding driver and daemon support.
 
-Zum direkten Start aus dem Klon:
+The packages on this page install the tray app and its desktop entries. Set up a compatible OpenRazer build for your distribution and confirm that it sees `1532:00E3` before using the tray. The [companion OpenRazer repository](https://github.com/ashrynsilkstone-ui/openrazer-basilisk-v4-pro) contains the receiver and underglow changes used to develop the app. See [OpenRazer's distribution instructions](https://openrazer.github.io/#download) for driver setup.
+
+## Install on Debian or Ubuntu
+
+Download the `.deb` from [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases), then run this in the download directory:
+
+```sh
+sudo apt install ./basilisk-v4-tray_0.1.0_all.deb
+```
+
+The package supports the Qt libraries available on Debian 13 and Ubuntu 24.04 LTS or newer. On Ubuntu, enable the **Universe** repository if APT cannot find the Qt binding. A compatible OpenRazer installation provides `python3-openrazer`.
+
+To uninstall:
+
+```sh
+sudo apt remove basilisk-v4-tray
+```
+
+## Install on Fedora
+
+Set up OpenRazer first using its [Fedora instructions](https://openrazer.github.io/#download). Fedora obtains `python3-openrazer` from the OpenRazer package repository. Download the `.rpm` from [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases), then run:
+
+```sh
+sudo dnf install ./basilisk-v4-tray-0.1.0-1.noarch.rpm
+```
+
+To uninstall:
+
+```sh
+sudo dnf remove basilisk-v4-tray
+```
+
+## Start the app and manage autostart
+
+Open **Basilisk V4 Pro** from the KDE application menu to start it immediately. Both packages add a KDE login autostart entry. Use **System Settings → Autostart** to turn it off.
+
+A previous per-user installation can override the packaged desktop entries. If KDE still launches an older copy, check the entries named `local.razer.BasiliskTray.desktop` in `~/.config/autostart` and `~/.local/share/applications`.
+
+## Install or build from source
+
+With Python 3, dbus-python, a compatible OpenRazer client and either PySide6 or PyQt6 installed, run:
 
 ```sh
 python3 razer_tray.py
 ```
 
-Für den Eintrag im KDE-Anwendungsmenü und den Autostart bei der Anmeldung:
+Run `python3 install.py` to add a menu entry and autostart for the current user. It uses `$XDG_DATA_HOME` and `$XDG_CONFIG_HOME`, which default to `~/.local/share` and `~/.config`. On CachyOS and Arch, the dependencies are `pyside6`, `python-dbus` and `python-openrazer`.
+
+Build the packages locally from the repository root. The first command needs `dpkg-deb`, the second needs `rpmbuild` and GNU tar:
 
 ```sh
-python3 install.py
+sh packaging/build-deb.sh
+sh packaging/build-rpm.sh
 ```
 
-Danach lässt sich **Basilisk V4 Pro** im Anwendungsmenü öffnen. Ein Klick auf das Tray-Symbol öffnet die Einstellungen.
-
-Der Installer schreibt unter `$XDG_DATA_HOME` und `$XDG_CONFIG_HOME`. Ohne diese Variablen liegen die Dateien unter `~/.local/share` und `~/.config`. Der Autostart lässt sich in den KDE-Systemeinstellungen unter **Autostart** deaktivieren.
+The build scripts place the packages in `dist/` by default. Pass a directory as the first argument to use another destination.

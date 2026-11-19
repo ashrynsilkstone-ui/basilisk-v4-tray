@@ -1,0 +1,2 @@
+#!/bin/sh
+exec /usr/bin/python3 /usr/share/basilisk-v4-tray/razer_tray.py "$@"

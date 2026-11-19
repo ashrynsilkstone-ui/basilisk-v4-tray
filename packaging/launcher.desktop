@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Basilisk V4 Pro
+Comment=Live status and settings for the Razer mouse
+Comment[de]=Live-Status und Einstellungen für die Razer-Maus
+Exec=basilisk-v4-tray --settings
+TryExec=basilisk-v4-tray
+Icon=input-mouse
+Terminal=false
+StartupNotify=false
+Categories=Settings;HardwareSettings;

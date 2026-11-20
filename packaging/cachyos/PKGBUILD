@@ -1,5 +1,5 @@
 pkgname=basilisk-v4-tray
-pkgver=0.1.6
+pkgver=0.1.7
 pkgrel=1
 pkgdesc='KDE tray status and settings for the Razer Basilisk V4 Pro'
 arch=('any')

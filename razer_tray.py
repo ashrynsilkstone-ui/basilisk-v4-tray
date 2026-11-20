@@ -502,6 +502,12 @@ class LightControls(QGroupBox):
         return changes
 
 
+class ScrollModeComboBox(QComboBox):
+    def wheelEvent(self, event):
+        # Turning the wheel to test a mode must leave the selected setting intact.
+        event.ignore()
+
+
 class SettingsDialog(QDialog):
     requested = Signal(object)
 
@@ -573,8 +579,8 @@ class SettingsDialog(QDialog):
 
         self.scroll_page = QWidget()
         scroll = QFormLayout(self.scroll_page)
-        self.scroll_mode = QComboBox()
-        self.scroll_cycle = QComboBox()
+        self.scroll_mode = ScrollModeComboBox()
+        self.scroll_cycle = ScrollModeComboBox()
         self.scroll_cycle_note = QLabel()
         self.scroll_cycle_note.setWordWrap(True)
         self.scroll_acceleration = QCheckBox("Scrollbeschleunigung aktivieren")

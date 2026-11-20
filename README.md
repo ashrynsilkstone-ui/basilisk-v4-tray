@@ -8,16 +8,17 @@ See the battery level, active DPI stage and polling rate of a Razer Basilisk V4 
 
 Click the icon to open the settings. You can configure up to five DPI stages with separate X and Y values, select the active stage and polling rate, and adjust the low-battery warning and sleep timeout. On the **Lighting** tab, the logo, scroll wheel and underglow each have their own brightness and effect. The available effects are off, static color, color cycling and wave. To resend a static color, confirm it again in the color picker and click **Apply**.
 
-On the **Scroll wheel** tab, choose free spin or a tactile mode with 24 or 48 notches. You can also adjust scroll acceleration and Smart Reel, which switches to free spin automatically when you scroll quickly. **Smart Reel sensitivity** has five levels stored in the active mouse profile. Click **Apply** to save your changes.
+On the **Scroll wheel** tab, **Modes to cycle through** sets which modes the assigned mouse button cycles through in the active profile. Click **Apply** to save your changes. If the current wheel mode is outside the new selection, the tray switches to one of the enabled modes.
 
-In testing, Smart Reel responded with these settings.
+Smart Reel, its five sensitivity levels, and scroll acceleration are available with these combinations.
 
-- **Mode → Free spin**
-- **Modes to cycle through → 24 notches and free spin** or **48 notches and free spin**
+- **24 notches and free spin**
+- **48 notches and free spin**
+- **All three modes**
 
-With a 24- or 48-notch tactile mode and free spin disabled for mode switching, the wheel stays tactile when flicked. The **24 and 48 notches** combination behaves this way.
+Smart Reel temporarily switches to free spin when you flick the wheel in a tactile mode. Scroll acceleration takes effect while the wheel is in free spin. Applying **24 and 48 notches** turns off both features.
 
-Use **Modes to cycle through** to choose which two or three modes the button already assigned to wheel-mode switching cycles through in the active mouse profile. The tray switches to an enabled mode if needed. When the mouse does not report the selection, the tray shows its last saved choice for that profile and connection. If the mouse rejects a mode, the tray reapplies the selected modes and tries again. The packaged udev rule gives the local desktop session access to the USB control interface for both connections. Reconnect the USB cable or the receiver after installation if access is denied.
+When the mouse does not report the selection, the tray shows its last saved choice for that profile and connection. If the mouse rejects a mode, the tray reapplies the selected modes and tries again. The packaged udev rule gives the local desktop session access to the USB control interface for both connections. Reconnect the USB cable or the receiver after installation if access is denied.
 
 ## Requirements
 
@@ -31,7 +32,7 @@ The packages on this page install the tray app and its desktop entries. Set up a
 Download the `.pkg.tar.zst` from [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases) and run this in the download directory:
 
 ```sh
-sudo pacman -U ./basilisk-v4-tray-0.1.11-1-any.pkg.tar.zst
+sudo pacman -U ./basilisk-v4-tray-0.1.12-1-any.pkg.tar.zst
 ```
 
 The tray package uses `python-openrazer` and the OpenRazer daemon already installed on the system. The [companion OpenRazer branch](https://github.com/ashrynsilkstone-ui/openrazer-basilisk-v4-pro/tree/basilisk-v4-pro-local) contains the driver and daemon changes tested with CachyOS.
@@ -49,7 +50,7 @@ sudo pacman -R basilisk-v4-tray
 Download the `.deb` from [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases), then run this in the download directory:
 
 ```sh
-sudo apt install ./basilisk-v4-tray_0.1.11_all.deb
+sudo apt install ./basilisk-v4-tray_0.1.12_all.deb
 ```
 
 The package supports the Qt libraries available on Debian 13 and Ubuntu 24.04 LTS or newer. On Ubuntu, enable the **Universe** repository if APT cannot find the Qt binding. A compatible OpenRazer installation provides `python3-openrazer`.
@@ -65,7 +66,7 @@ sudo apt remove basilisk-v4-tray
 Set up OpenRazer first using its [Fedora instructions](https://openrazer.github.io/#download). Fedora obtains `python3-openrazer` from the OpenRazer package repository. Download the `.rpm` from [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases), then run:
 
 ```sh
-sudo dnf install ./basilisk-v4-tray-0.1.11-1.noarch.rpm
+sudo dnf install ./basilisk-v4-tray-0.1.12-1.noarch.rpm
 ```
 
 To uninstall:

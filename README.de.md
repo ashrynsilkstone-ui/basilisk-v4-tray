@@ -8,16 +8,17 @@ Die Tray-App zeigt Akkustand, aktive DPI-Stufe und Pollingrate einer Razer Basil
 
 Ein Klick auf das Symbol öffnet die Einstellungen. Dort kannst du bis zu fünf DPI-Stufen mit getrennten X- und Y-Werten bearbeiten, die aktive Stufe und Pollingrate wählen sowie Akku-Warnschwelle und Ruhezustand einstellen. Im Reiter **Beleuchtung** haben Logo, Scrollrad und Unterboden eigene Regler für Helligkeit und Effekt. Zur Auswahl stehen Aus, statische Farbe, Farbwechsel und Welle. Um eine statische Farbe erneut zu senden, bestätige sie im Farbdialog und klicke auf **Übernehmen**.
 
-Im Reiter **Scrollrad** kannst du zwischen Freilauf und 24 oder 48 Rastpunkten wählen. Außerdem kannst du die Scrollbeschleunigung und Smart Reel einstellen. Smart Reel wechselt bei schnellem Scrollen automatisch in den Freilauf. Die **Smart-Reel-Empfindlichkeit** hat fünf Stufen, die im aktiven Mausprofil gespeichert werden. Klick auf **Übernehmen**, um deine Änderungen zu speichern.
+Im Reiter **Scrollrad** legst du unter **Modi beim Umschalten** fest, welche Modi die bereits belegte Maustaste im aktiven Profil durchläuft. Klick auf **Übernehmen**, um deine Änderungen zu speichern. Liegt der aktuelle Radmodus außerhalb der neuen Auswahl, wechselt der Tray in einen der freigegebenen Modi.
 
-In den bisherigen Tests reagierte Smart Reel bei diesen Einstellungen.
+Smart Reel, seine fünf Empfindlichkeitsstufen und die Scrollbeschleunigung sind bei diesen Kombinationen verfügbar.
 
-- **Modus → Freilauf**
-- **Modi beim Umschalten → 24 Rastpunkte und Freilauf** oder **48 Rastpunkte und Freilauf**
+- **24 Rastpunkte und Freilauf**
+- **48 Rastpunkte und Freilauf**
+- **Alle drei Modi**
 
-Bei 24 oder 48 Rastpunkten ohne freigegebenen Freilauf bleibt das Rad beim schnellen Drehen im Rastmodus, etwa mit der Umschaltkombination **24 und 48 Rastpunkte**.
+Smart Reel wechselt aus einem Rastmodus kurz in den Freilauf, wenn du das Rad schnell drehst. Die Scrollbeschleunigung wirkt im Freilauf. Wenn du **24 und 48 Rastpunkte** übernimmst, werden beide Funktionen ausgeschaltet.
 
-Unter **Modi beim Umschalten** wählst du, welche zwei oder drei Modi die im aktiven Mausprofil bereits dafür belegte Taste durchläuft. Der Tray wechselt bei Bedarf auf einen freigegebenen Modus. Liefert die Maus keine Auswahl zurück, zeigt der Tray die zuletzt für dieses Profil und diese Verbindung gespeicherte Auswahl. Weist die Maus einen Modus zurück, sendet der Tray die ausgewählten Modi erneut. Die udev-Regel im Paket gibt der lokalen Desktop-Sitzung Zugriff auf die USB-Steuerschnittstelle beider Verbindungen. Falls der Zugriff nach der Installation fehlt, stecke das USB-Kabel oder den Dongle neu ein.
+Liefert die Maus keine Auswahl zurück, zeigt der Tray die zuletzt für dieses Profil und diese Verbindung gespeicherte Auswahl. Weist die Maus einen Modus zurück, sendet der Tray die ausgewählten Modi erneut. Die udev-Regel im Paket gibt der lokalen Desktop-Sitzung Zugriff auf die USB-Steuerschnittstelle beider Verbindungen. Falls der Zugriff nach der Installation fehlt, stecke das USB-Kabel oder den Dongle neu ein.
 
 ## Voraussetzungen
 
@@ -31,7 +32,7 @@ Die Pakete auf dieser Seite installieren die Tray-App und ihre Desktop-Einträge
 Lade die `.pkg.tar.zst`-Datei unter [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases) herunter und führe im Downloadordner aus:
 
 ```sh
-sudo pacman -U ./basilisk-v4-tray-0.1.11-1-any.pkg.tar.zst
+sudo pacman -U ./basilisk-v4-tray-0.1.12-1-any.pkg.tar.zst
 ```
 
 Das Tray-Paket verwendet die installierte Python-Bibliothek `python-openrazer` und den vorhandenen OpenRazer-Daemon. Der [zugehörige OpenRazer-Zweig](https://github.com/ashrynsilkstone-ui/openrazer-basilisk-v4-pro/tree/basilisk-v4-pro-local) enthält die unter CachyOS getesteten Änderungen am Treiber und Daemon.
@@ -49,7 +50,7 @@ sudo pacman -R basilisk-v4-tray
 Lade die `.deb`-Datei unter [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases) herunter und führe im Downloadordner aus:
 
 ```sh
-sudo apt install ./basilisk-v4-tray_0.1.11_all.deb
+sudo apt install ./basilisk-v4-tray_0.1.12_all.deb
 ```
 
 Das Paket unterstützt die Qt-Bibliotheken aus Debian 13 und Ubuntu ab 24.04 LTS. Wenn APT unter Ubuntu das Qt-Binding nicht findet, aktiviere die Paketquelle **Universe**. Eine passende OpenRazer-Installation stellt `python3-openrazer` bereit.
@@ -65,7 +66,7 @@ sudo apt remove basilisk-v4-tray
 Richte OpenRazer zuerst nach der [Fedora-Anleitung](https://openrazer.github.io/#download) ein. Fedora bezieht `python3-openrazer` aus der OpenRazer-Paketquelle. Lade die `.rpm`-Datei unter [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases) herunter und führe aus:
 
 ```sh
-sudo dnf install ./basilisk-v4-tray-0.1.11-1.noarch.rpm
+sudo dnf install ./basilisk-v4-tray-0.1.12-1.noarch.rpm
 ```
 
 Deinstallation:

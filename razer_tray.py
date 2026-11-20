@@ -47,8 +47,9 @@ DEFAULT_STAGES = (1200, 1600, 2400, 3200, 6400)
 LIGHT_ZONES = {"logo": "Logo", "scroll_wheel": "Scrollrad", "backlight": "Unterboden"}
 LIGHT_EFFECTS = {"none": "Aus", "static": "Statisch", "spectrum": "Farbwechsel", "wave": "Welle"}
 FREE_SPIN = 1
-SCROLL_MODES = {0: "Rastend (24 Rastpunkte)", 2: "Rastend (48 Rastpunkte)", FREE_SPIN: "Freilauf"}
-SCROLL_SETTINGS = ("scroll_mode", "scroll_acceleration", "scroll_smart_reel")
+SCROLL_MODES = (0, 2, FREE_SPIN)
+SCROLL_ASSISTS = ("scroll_acceleration", "scroll_smart_reel")
+SCROLL_SETTINGS = ("scroll_mode", *SCROLL_ASSISTS)
 SMART_REEL_LEVELS = range(5)
 SCROLL_CYCLE_LABEL = "Modi beim Umschalten"
 SCROLL_CYCLES = {
@@ -61,6 +62,10 @@ SCROLL_CYCLES = {
 
 class ScrollModeError(OSError):
     pass
+
+
+def cycle_has_free_spin(cycle):
+    return cycle is not None and bool(cycle & (1 << FREE_SPIN))
 
 
 def scroll_feature_report(device, command_class, command, arguments, expected_prefix=b""):
@@ -309,9 +314,7 @@ class MouseWorker(QObject):
         except DEVICE_ERRORS:
             self.mark_disconnected()
 
-    def set_scroll_mode(self, mode, cycle=None):
-        if cycle is not None and not cycle & (1 << mode):
-            raise ScrollModeError(f"Wähle den gewünschten Modus zuerst unter „{SCROLL_CYCLE_LABEL}“ aus.")
+    def set_scroll_mode(self, mode, cycle):
         self.mouse.scroll_mode = mode
         sleep(0.5)
         if self.mouse.scroll_mode == mode:
@@ -320,11 +323,7 @@ class MouseWorker(QObject):
         try:
             with open_scroll_device(self.mouse.serial, self.product_id) as device:
                 profile = active_scroll_profile(device)
-                live = read_scroll_mask(device, 0) & 0b111
-                repair_cycle = cycle if cycle is not None else 0b111
-                if cycle is None and live in SCROLL_CYCLES:
-                    repair_cycle = live
-                write_scroll_cycle(device, profile, repair_cycle)
+                write_scroll_cycle(device, profile, cycle)
         except OSError as exc:
             repair_error = exc
         self.mouse.scroll_mode = mode
@@ -344,31 +343,18 @@ class MouseWorker(QObject):
 
     def apply(self, current, changes):
         mouse = self.mouse
-        scroll = changes.get("scroll", {})
-        for key in SCROLL_SETTINGS:
+        scroll_edits = changes.get("scroll", {})
+        scroll = {key: scroll_edits[key] for key in SCROLL_ASSISTS if key in scroll_edits}
+        for key in SCROLL_ASSISTS:
             if key in scroll and not mouse.has(key):
                 raise ValueError(f"Scrollradeinstellung {key} ist nicht verfügbar.")
-        smart_reel = scroll.get("scroll_smart_reel")
         cycle_edit = changes.get("scroll_cycle")
-        mode = scroll.get("scroll_mode")
-        needs_free_spin = self.product_id == BASILISK_WIRED and (
-            smart_reel is True
-            or (cycle_edit is not None and smart_reel is None
-                and mouse.has("scroll_smart_reel") and mouse.scroll_smart_reel)
-        )
-        cycle = cycle_edit[1] if cycle_edit is not None else None
-        if cycle_edit is None and (mode is not None or needs_free_spin):
-            try:
-                _, cycle, _ = self.read_scroll_cycle()
-            except OSError:
-                pass  # Ordinary OpenRazer controls can work without hidraw access.
-        if needs_free_spin and (cycle is None or not cycle & (1 << FREE_SPIN)):
-            raise ScrollModeError(
-                f"Smart Reel braucht am USB-Kabel Freilauf. Wähle unter „{SCROLL_CYCLE_LABEL}“ "
-                "eine Kombination mit Freilauf oder schalte Smart Reel aus."
-            )
-        if cycle_edit is not None and mode is not None and not cycle & (1 << mode):
-            raise ScrollModeError(f"Wähle einen der unter „{SCROLL_CYCLE_LABEL}“ erlaubten Modi.")
+        if any(scroll.values()) or "smart_reel_level" in changes:
+            cycle = cycle_edit[1] if cycle_edit is not None else self.read_scroll_cycle()[1]
+            if not cycle_has_free_spin(cycle):
+                raise ScrollModeError(
+                    f"Wähle unter „{SCROLL_CYCLE_LABEL}“ eine Kombination mit Freilauf."
+                )
 
         dpi = changes.get("dpi", current.dpi)
         stage = changes.get("stage", min(max(current.stage, 1), len(dpi)))
@@ -384,21 +370,25 @@ class MouseWorker(QObject):
             mouse.set_low_battery_threshold(changes["threshold"])
         if "idle" in changes and changes["idle"] != mouse.get_idle_time():
             mouse.set_idle_time(changes["idle"])
-        if smart_reel is False:
-            mouse.scroll_smart_reel = False
         if cycle_edit is not None:
             profile, cycle = cycle_edit
             self.set_scroll_cycle(profile, cycle)
-            if mode is None and not cycle & (1 << mouse.scroll_mode):
+            if not cycle_has_free_spin(cycle):
+                for key in SCROLL_ASSISTS:
+                    if mouse.has(key) and getattr(mouse, key):
+                        scroll[key] = False
+        for key, enabled in scroll.items():
+            if not enabled:
+                setattr(mouse, key, False)
+        if cycle_edit is not None:
+            if not cycle & (1 << mouse.scroll_mode):
                 mode = next(value for value in SCROLL_MODES if cycle & (1 << value))
-        if mode is not None:
-            self.set_scroll_mode(mode, cycle)
-        if "scroll_acceleration" in scroll:
-            mouse.scroll_acceleration = scroll["scroll_acceleration"]
+                self.set_scroll_mode(mode, cycle)
         if "smart_reel_level" in changes:
             self.set_smart_reel_level(*changes["smart_reel_level"])
-        if smart_reel is True:
-            mouse.scroll_smart_reel = True
+        for key, enabled in scroll.items():
+            if enabled:
+                setattr(mouse, key, True)
         for name, edits in changes.get("lights", {}).items():
             zone = getattr(mouse.fx.misc, name)
             if zone is None:
@@ -472,7 +462,10 @@ class MouseWorker(QObject):
                               for name, edits in changes.get("lights", {}).items() for key, value in edits.items())
             changed_scroll = ((scroll.get(key), value) for key, value in changes.get("scroll", {}).items())
             if "scroll_cycle" in changes:
-                changed_scroll = (*changed_scroll, ((profile, cycle), changes["scroll_cycle"]))
+                requested_profile, requested_cycle = changes["scroll_cycle"]
+                changed_scroll = (*changed_scroll, ((profile, cycle), (requested_profile, requested_cycle)))
+                if not cycle_has_free_spin(requested_cycle):
+                    changed_scroll = (*changed_scroll, *((scroll[key], False) for key in SCROLL_ASSISTS if key in scroll))
             if any(current != requested for current, requested in
                    (*changed_values, *changed_lights, *changed_scroll)):
                 error = "Einige Werte wurden von der Maus anders zurückgemeldet. Die aktuellen Werte sind unten eingetragen."
@@ -666,31 +659,31 @@ class SettingsDialog(QDialog):
 
         self.scroll_page = QWidget()
         scroll = QFormLayout(self.scroll_page)
-        self.scroll_mode = ScrollModeComboBox()
         self.scroll_cycle = ScrollModeComboBox()
         self.scroll_cycle.setToolTip("Legt fest, welche Modi die bereits belegte Taste durchläuft.")
         self.scroll_cycle_note = QLabel()
         self.scroll_cycle_note.setWordWrap(True)
         self.scroll_acceleration = QCheckBox("Scrollbeschleunigung aktivieren")
+        self.scroll_acceleration.setToolTip("Wirkt, wenn sich das Rad im Freilauf befindet.")
         self.scroll_smart_reel = QCheckBox("Smart Reel aktivieren")
         self.scroll_smart_reel.setToolTip("Wechselt bei schnellem Scrollen automatisch in den Freilauf.")
         self.scroll_smart_reel_level = ScrollModeComboBox()
         self.scroll_smart_reel_level.setToolTip("Legt fest, wie empfindlich Smart Reel auf schnelles Drehen reagiert.")
-        self.scroll_smart_reel_note = QLabel(
-            f"Am USB-Kabel muss unter „{SCROLL_CYCLE_LABEL}“ Freilauf ausgewählt sein."
+        self.scroll_assists_note = QLabel(
+            "Smart Reel und Scrollbeschleunigung sind bei Kombinationen mit Freilauf verfügbar."
         )
-        self.scroll_smart_reel_note.setWordWrap(True)
+        self.scroll_assists_note.setWordWrap(True)
         self.scroll_unavailable = QLabel("OpenRazer meldet keine Scrollrad-Einstellungen für diese Maus.")
         self.scroll_unavailable.setWordWrap(True)
-        scroll.addRow("Modus", self.scroll_mode)
         scroll.addRow(SCROLL_CYCLE_LABEL, self.scroll_cycle)
         scroll.addRow(self.scroll_cycle_note)
         scroll.addRow(self.scroll_acceleration)
         scroll.addRow(self.scroll_smart_reel)
         scroll.addRow("Smart-Reel-Empfindlichkeit", self.scroll_smart_reel_level)
-        scroll.addRow(self.scroll_smart_reel_note)
+        scroll.addRow(self.scroll_assists_note)
         scroll.addRow(self.scroll_unavailable)
         self.scroll_unavailable.hide()
+        self.scroll_cycle.currentIndexChanged.connect(self.update_scroll_assists)
         self.tabs.addTab(self.scroll_page, "Scrollrad")
 
         self.message = QLabel()
@@ -761,13 +754,12 @@ class SettingsDialog(QDialog):
         self.idle.setValue(state.idle)
         for name, controls in self.lights.items():
             controls.load(state.lights.get(name))
-        self.load_scroll(state.scroll)
-        self.load_scroll_cycle(state)
-        has_smart_reel = "scroll_smart_reel" in state.scroll
-        self.scroll_smart_reel_note.setVisible(state.wired and has_smart_reel)
+        self.load_scroll(state)
+
+    def load_scroll(self, state):
+        self.scroll_acceleration.setChecked(state.scroll.get("scroll_acceleration", False))
+        self.scroll_smart_reel.setChecked(state.scroll.get("scroll_smart_reel", False))
         level = self.scroll_smart_reel_level
-        self.scroll_page.layout().labelForField(level).setVisible(has_smart_reel)
-        level.setVisible(has_smart_reel)
         level.setEnabled(state.smart_reel_level is not None)
         level.clear()
         if state.smart_reel_level is None:
@@ -776,6 +768,9 @@ class SettingsDialog(QDialog):
             for value in SMART_REEL_LEVELS:
                 level.addItem(f"Stufe {value + 1}", value)
             level.setCurrentIndex(level.findData(state.smart_reel_level))
+        self.load_scroll_cycle(state)
+        self.update_scroll_assists()
+        self.scroll_unavailable.setVisible(not state.scroll)
 
     def load_scroll_cycle(self, state):
         self.scroll_cycle.clear()
@@ -795,24 +790,17 @@ class SettingsDialog(QDialog):
         self.scroll_cycle_note.setText(note)
         self.scroll_cycle_note.setVisible(bool(note))
 
-    def load_scroll(self, scroll):
-        form = self.scroll_page.layout()
-        mode_available = "scroll_mode" in scroll
-        form.labelForField(self.scroll_mode).setVisible(mode_available)
-        self.scroll_mode.setVisible(mode_available)
-        self.scroll_mode.clear()
-        if mode_available:
-            mode = scroll["scroll_mode"]
-            for value, label in SCROLL_MODES.items():
-                self.scroll_mode.addItem(label, value)
-            if mode not in SCROLL_MODES:
-                self.scroll_mode.addItem(f"Aktuell ({mode})", mode)
-            self.scroll_mode.setCurrentIndex(self.scroll_mode.findData(mode))
-        self.scroll_acceleration.setVisible("scroll_acceleration" in scroll)
-        self.scroll_acceleration.setChecked(scroll.get("scroll_acceleration", False))
-        self.scroll_smart_reel.setVisible("scroll_smart_reel" in scroll)
-        self.scroll_smart_reel.setChecked(scroll.get("scroll_smart_reel", False))
-        self.scroll_unavailable.setVisible(not scroll)
+    def update_scroll_assists(self):
+        if self.current is None:
+            return
+        scroll = self.current.scroll
+        has_free_spin = cycle_has_free_spin(self.scroll_cycle.currentData())
+        show_smart_reel = has_free_spin and "scroll_smart_reel" in scroll
+        self.scroll_smart_reel.setVisible(show_smart_reel)
+        self.scroll_acceleration.setVisible(has_free_spin and "scroll_acceleration" in scroll)
+        self.scroll_smart_reel_level.setVisible(show_smart_reel)
+        self.scroll_page.layout().labelForField(self.scroll_smart_reel_level).setVisible(show_smart_reel)
+        self.scroll_assists_note.setVisible(not has_free_spin and any(key in scroll for key in SCROLL_ASSISTS))
 
     def request(self, changes=None):
         self.busy = True
@@ -841,21 +829,21 @@ class SettingsDialog(QDialog):
         light_edits = {name: edits for name, controls in self.lights.items() if (edits := controls.changes())}
         if light_edits:
             changes["lights"] = light_edits
-        scroll_edits = {
-            key: value for key, value in (
-                ("scroll_mode", self.scroll_mode.currentData()),
-                ("scroll_acceleration", self.scroll_acceleration.isChecked()),
-                ("scroll_smart_reel", self.scroll_smart_reel.isChecked()),
-            ) if key in state.scroll and value != state.scroll[key]
-        }
-        if scroll_edits:
-            changes["scroll"] = scroll_edits
         cycle = self.scroll_cycle.currentData()
         if state.scroll_profile is not None and cycle is not None and cycle != state.scroll_cycle:
             changes["scroll_cycle"] = state.scroll_profile, cycle
-        level = self.scroll_smart_reel_level.currentData()
-        if state.scroll_profile is not None and level is not None and level != state.smart_reel_level:
-            changes["smart_reel_level"] = state.wired, state.scroll_profile, level
+        if cycle_has_free_spin(cycle):
+            scroll_edits = {
+                key: value for key, value in (
+                    ("scroll_acceleration", self.scroll_acceleration.isChecked()),
+                    ("scroll_smart_reel", self.scroll_smart_reel.isChecked()),
+                ) if key in state.scroll and value != state.scroll[key]
+            }
+            if scroll_edits:
+                changes["scroll"] = scroll_edits
+            level = self.scroll_smart_reel_level.currentData()
+            if state.scroll_profile is not None and level is not None and level != state.smart_reel_level:
+                changes["smart_reel_level"] = state.wired, state.scroll_profile, level
         if not changes and self.tabs.currentIndex() == 0:
             changes["polling"] = self.polling.currentData()
         if changes:

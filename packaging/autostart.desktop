@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=Basilisk V4 Pro
-Comment=Show the Basilisk V4 Pro in the KDE system tray
-Comment[de]=Basilisk V4 Pro im KDE-Systemtray anzeigen
+Name=OpenRazer Mouse Tray
+Comment=Show the selected OpenRazer mouse in the KDE system tray
+Comment[de]=Die ausgewählte OpenRazer-Maus im KDE-Systemtray anzeigen
 Exec=basilisk-v4-tray
 TryExec=basilisk-v4-tray
 Icon=input-mouse

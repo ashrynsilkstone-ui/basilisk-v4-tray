@@ -1,12 +1,16 @@
-# Basilisk V4 Pro Tray for KDE
+# OpenRazer Mouse Tray for KDE
 
 [German](README.de.md) · [CachyOS and Arch](#install-on-cachyos-or-arch-linux) · [Debian and Ubuntu](#install-on-debian-or-ubuntu) · [Fedora](#install-on-fedora) · [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases)
 
 **CachyOS KDE** has a native Pacman package and a [PKGBUILD in this repository](packaging/cachyos/PKGBUILD).
 
-See the battery level, active DPI stage and polling rate of a Razer Basilisk V4 Pro over USB cable (`1532:00E2`) or its HyperSpeed receiver (`1532:00E3`). The tray uses the USB cable when both are connected. The number in the tray icon is the DPI stage and the bar is the battery level. Hover over the icon or open its context menu for all three readings.
+The tray automatically detects mice and supported receivers reported by OpenRazer. When several are connected, select a device in the tray menu or in Settings. The icon shows the active DPI stage and battery level when available. The tooltip and menu also show the current polling rate.
 
-Click the icon to open the settings. You can configure up to five DPI stages with separate X and Y values, select the active stage and polling rate, and adjust the low-battery warning and sleep timeout. On the **Lighting** tab, the logo, scroll wheel and underglow each have their own brightness and effect. The available effects are off, static color, color cycling and wave. To resend a static color, confirm it again in the color picker and click **Apply**.
+Click the icon to open Settings. The controls depend on the selected device and its OpenRazer driver. Available settings can include DPI or DPI stages, polling rate, low-battery warning, sleep timeout, scroll wheel and lighting. On the **Dongle** tab, the Viper V4 Pro via HyperSpeed (`1532:00E6`) has three independently configurable status LEDs. Click **Apply** to save your changes.
+
+## Basilisk V4 Pro
+
+The Basilisk V4 Pro is supported over USB (`1532:00E2`) and HyperSpeed (`1532:00E3`). With both present, the tray selects USB by default. Its logo, scroll wheel and underglow each have brightness and effect controls. To resend a static color, confirm it again in the color picker and click **Apply**.
 
 On the **Scroll wheel** tab, **Modes to cycle through** sets which modes the assigned mouse button cycles through in the active profile. Click **Apply** to save your changes. If the current wheel mode is outside the new selection, the tray switches to one of the enabled modes.
 
@@ -23,7 +27,7 @@ When the mouse does not report the selection, the tray shows its last saved choi
 ## Requirements
 
 - A KDE Plasma session with a working user D-Bus and system tray
-- OpenRazer's kernel driver, daemon and matching Python client with support for the **Basilisk V4 Pro** over USB or HyperSpeed. Separate underglow controls require the corresponding driver and daemon support.
+- OpenRazer's kernel driver, daemon and matching Python client with support for your mouse. Separate Basilisk underglow controls require the corresponding driver and daemon support.
 
 The packages on this page install the tray app and its desktop entries. Set up a compatible OpenRazer build for your distribution and confirm that it detects the mouse. The companion repository provides the OpenRazer build used to test USB, HyperSpeed and underglow. See the [companion OpenRazer repository](https://github.com/ashrynsilkstone-ui/openrazer-basilisk-v4-pro) and [OpenRazer's distribution instructions](https://openrazer.github.io/#download).
 
@@ -32,7 +36,7 @@ The packages on this page install the tray app and its desktop entries. Set up a
 Download the `.pkg.tar.zst` from [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases) and run this in the download directory:
 
 ```sh
-sudo pacman -U ./basilisk-v4-tray-0.1.12-1-any.pkg.tar.zst
+sudo pacman -U ./basilisk-v4-tray-0.2.0-1-any.pkg.tar.zst
 ```
 
 The tray package uses `python-openrazer` and the OpenRazer daemon already installed on the system. The [companion OpenRazer branch](https://github.com/ashrynsilkstone-ui/openrazer-basilisk-v4-pro/tree/basilisk-v4-pro-local) contains the driver and daemon changes tested with CachyOS.
@@ -50,7 +54,7 @@ sudo pacman -R basilisk-v4-tray
 Download the `.deb` from [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases), then run this in the download directory:
 
 ```sh
-sudo apt install ./basilisk-v4-tray_0.1.12_all.deb
+sudo apt install ./basilisk-v4-tray_0.2.0_all.deb
 ```
 
 The package supports the Qt libraries available on Debian 13 and Ubuntu 24.04 LTS or newer. On Ubuntu, enable the **Universe** repository if APT cannot find the Qt binding. A compatible OpenRazer installation provides `python3-openrazer`.
@@ -66,7 +70,7 @@ sudo apt remove basilisk-v4-tray
 Set up OpenRazer first using its [Fedora instructions](https://openrazer.github.io/#download). Fedora obtains `python3-openrazer` from the OpenRazer package repository. Download the `.rpm` from [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases), then run:
 
 ```sh
-sudo dnf install ./basilisk-v4-tray-0.1.12-1.noarch.rpm
+sudo dnf install ./basilisk-v4-tray-0.2.0-1.noarch.rpm
 ```
 
 To uninstall:
@@ -77,7 +81,7 @@ sudo dnf remove basilisk-v4-tray
 
 ## Start the app and manage autostart
 
-Open **Basilisk V4 Pro** from the KDE application menu to start it immediately. Each package adds a KDE login autostart entry. Use **System Settings → Autostart** to turn it off.
+Open **OpenRazer Mouse Tray** from the KDE application menu to start it immediately. Each package adds a KDE login autostart entry. Use **System Settings → Autostart** to turn it off.
 
 A previous per-user installation can override the packaged desktop entries. If KDE still launches an older copy, check the entries named `local.razer.BasiliskTray.desktop` in `~/.config/autostart` and `~/.local/share/applications`.
 

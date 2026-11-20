@@ -29,7 +29,7 @@ def main():
     launcher = data / "applications" / DESKTOP_FILE
     autostart = config / "autostart" / DESKTOP_FILE
     entry = (
-        "[Desktop Entry]\nType=Application\nName=Basilisk V4 Pro\n"
+        "[Desktop Entry]\nType=Application\nName=OpenRazer Mouse Tray\n"
         "Comment=Live-Status und Einstellungen für die Razer-Maus\n"
         "Icon=input-mouse\nTerminal=false\nStartupNotify=false\n"
     )
@@ -37,7 +37,7 @@ def main():
     launcher.write_text(entry + f"Exec={command} --settings\nCategories=Settings;HardwareSettings;\n")
     autostart.parent.mkdir(parents=True, exist_ok=True)
     autostart.write_text(entry + f"Exec={command}\nOnlyShowIn=KDE;\n")
-    print("Basilisk V4 Pro ist im KDE-Anwendungsmenü und im Autostart eingerichtet.")
+    print("OpenRazer Mouse Tray ist im KDE-Anwendungsmenü und im Autostart eingerichtet.")
 
 
 if __name__ == "__main__":

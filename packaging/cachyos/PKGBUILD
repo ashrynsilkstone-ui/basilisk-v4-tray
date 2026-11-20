@@ -1,7 +1,7 @@
 pkgname=basilisk-v4-tray
-pkgver=0.1.12
+pkgver=0.2.0
 pkgrel=1
-pkgdesc='KDE tray status and settings for the Razer Basilisk V4 Pro'
+pkgdesc='KDE tray status and settings for OpenRazer mice and receivers'
 arch=('any')
 url='https://github.com/ashrynsilkstone-ui/basilisk-v4-tray'
 license=('LicenseRef-Unspecified')

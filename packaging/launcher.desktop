@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Name=Basilisk V4 Pro
+Name=OpenRazer Mouse Tray
 Comment=Live status and settings for the Razer mouse
 Comment[de]=Live-Status und Einstellungen für die Razer-Maus
 Exec=basilisk-v4-tray --settings

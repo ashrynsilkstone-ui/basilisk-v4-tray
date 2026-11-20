@@ -1,12 +1,16 @@
-# Basilisk V4 Pro im KDE-Systemtray
+# OpenRazer Mouse Tray für KDE
 
 [English](README.md) · [CachyOS und Arch](#installation-unter-cachyos-oder-arch-linux) · [Debian und Ubuntu](#installation-unter-debian-oder-ubuntu) · [Fedora](#installation-unter-fedora) · [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases)
 
 Für **CachyOS mit KDE** gibt es ein natives Pacman-Paket und ein [PKGBUILD im Repository](packaging/cachyos/PKGBUILD).
 
-Die Tray-App zeigt Akkustand, aktive DPI-Stufe und Pollingrate einer Razer Basilisk V4 Pro am USB-Kabel (`1532:00E2`) oder am HyperSpeed-Dongle (`1532:00E3`). Sind beide angeschlossen, verwendet der Tray das USB-Kabel. Die Zahl im Symbol steht für die DPI-Stufe, der Balken für den Akku. Im Tooltip und im Kontextmenü stehen alle drei Werte.
+Die Tray-App erkennt automatisch Mäuse und unterstützte Empfänger, die OpenRazer meldet. Sind mehrere Geräte angeschlossen, wählst du das gewünschte Gerät im Tray-Menü oder in den Einstellungen aus. Das Symbol zeigt, soweit verfügbar, die aktive DPI-Stufe und den Akkustand. Im Tooltip und im Menü steht zusätzlich die Pollingrate.
 
-Ein Klick auf das Symbol öffnet die Einstellungen. Dort kannst du bis zu fünf DPI-Stufen mit getrennten X- und Y-Werten bearbeiten, die aktive Stufe und Pollingrate wählen sowie Akku-Warnschwelle und Ruhezustand einstellen. Im Reiter **Beleuchtung** haben Logo, Scrollrad und Unterboden eigene Regler für Helligkeit und Effekt. Zur Auswahl stehen Aus, statische Farbe, Farbwechsel und Welle. Um eine statische Farbe erneut zu senden, bestätige sie im Farbdialog und klicke auf **Übernehmen**.
+Ein Klick auf das Symbol öffnet die Einstellungen. Welche Regler erscheinen, hängt vom gewählten Gerät und dessen OpenRazer-Treiber ab. Je nach Maus kannst du DPI oder DPI-Stufen, Pollingrate, Akkuwarnung, Ruhezustand, Scrollrad und Beleuchtung einstellen. Bei der Viper V4 Pro am HyperSpeed-Empfänger (`1532:00E6`) lassen sich unter **Dongle** drei Status-LEDs einzeln einstellen. Klicke auf **Übernehmen**, um Änderungen zu speichern.
+
+## Basilisk V4 Pro
+
+Die Basilisk V4 Pro wird per USB (`1532:00E2`) und HyperSpeed (`1532:00E3`) unterstützt. Sind beide Verbindungen vorhanden, wählt der Tray standardmäßig USB. Logo, Scrollrad und Unterboden haben eigene Regler für Effekt und Helligkeit. Um eine statische Farbe erneut zu senden, bestätige sie im Farbdialog und klicke auf **Übernehmen**.
 
 Im Reiter **Scrollrad** legst du unter **Modi beim Umschalten** fest, welche Modi die bereits belegte Maustaste im aktiven Profil durchläuft. Klick auf **Übernehmen**, um deine Änderungen zu speichern. Liegt der aktuelle Radmodus außerhalb der neuen Auswahl, wechselt der Tray in einen der freigegebenen Modi.
 
@@ -23,7 +27,7 @@ Liefert die Maus keine Auswahl zurück, zeigt der Tray die zuletzt für dieses P
 ## Voraussetzungen
 
 - Eine KDE-Plasma-Sitzung mit Benutzer-D-Bus und Systemtray
-- OpenRazer-Kerneltreiber, Daemon und passende Python-Bibliothek mit Unterstützung für die **Basilisk V4 Pro** per USB oder HyperSpeed. Die separate Unterbodenbeleuchtung braucht zusätzlich die entsprechenden Treiber- und Daemon-Funktionen.
+- OpenRazer-Kerneltreiber, Daemon und passende Python-Bibliothek mit Unterstützung für deine Maus. Die separate Unterbodenbeleuchtung der Basilisk benötigt die entsprechenden Treiber- und Daemon-Funktionen.
 
 Die Pakete auf dieser Seite installieren die Tray-App und ihre Desktop-Einträge. Richte zuerst einen für deine Distribution passenden OpenRazer-Build ein und prüfe, ob er die Maus erkennt. Im zugehörigen Repository findest du den OpenRazer-Build, mit dem USB, HyperSpeed und die Unterbodenbeleuchtung getestet wurden. [Zugehöriges OpenRazer-Repository](https://github.com/ashrynsilkstone-ui/openrazer-basilisk-v4-pro) · [OpenRazer-Anleitung zur Treiberinstallation](https://openrazer.github.io/#download)
 
@@ -32,7 +36,7 @@ Die Pakete auf dieser Seite installieren die Tray-App und ihre Desktop-Einträge
 Lade die `.pkg.tar.zst`-Datei unter [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases) herunter und führe im Downloadordner aus:
 
 ```sh
-sudo pacman -U ./basilisk-v4-tray-0.1.12-1-any.pkg.tar.zst
+sudo pacman -U ./basilisk-v4-tray-0.2.0-1-any.pkg.tar.zst
 ```
 
 Das Tray-Paket verwendet die installierte Python-Bibliothek `python-openrazer` und den vorhandenen OpenRazer-Daemon. Der [zugehörige OpenRazer-Zweig](https://github.com/ashrynsilkstone-ui/openrazer-basilisk-v4-pro/tree/basilisk-v4-pro-local) enthält die unter CachyOS getesteten Änderungen am Treiber und Daemon.
@@ -50,7 +54,7 @@ sudo pacman -R basilisk-v4-tray
 Lade die `.deb`-Datei unter [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases) herunter und führe im Downloadordner aus:
 
 ```sh
-sudo apt install ./basilisk-v4-tray_0.1.12_all.deb
+sudo apt install ./basilisk-v4-tray_0.2.0_all.deb
 ```
 
 Das Paket unterstützt die Qt-Bibliotheken aus Debian 13 und Ubuntu ab 24.04 LTS. Wenn APT unter Ubuntu das Qt-Binding nicht findet, aktiviere die Paketquelle **Universe**. Eine passende OpenRazer-Installation stellt `python3-openrazer` bereit.
@@ -66,7 +70,7 @@ sudo apt remove basilisk-v4-tray
 Richte OpenRazer zuerst nach der [Fedora-Anleitung](https://openrazer.github.io/#download) ein. Fedora bezieht `python3-openrazer` aus der OpenRazer-Paketquelle. Lade die `.rpm`-Datei unter [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases) herunter und führe aus:
 
 ```sh
-sudo dnf install ./basilisk-v4-tray-0.1.12-1.noarch.rpm
+sudo dnf install ./basilisk-v4-tray-0.2.0-1.noarch.rpm
 ```
 
 Deinstallation:
@@ -77,7 +81,7 @@ sudo dnf remove basilisk-v4-tray
 
 ## Start und Autostart
 
-Öffne **Basilisk V4 Pro** im KDE-Anwendungsmenü, um die App sofort zu starten. Jedes Paket richtet den Start bei der KDE-Anmeldung ein. Unter **Systemeinstellungen → Autostart** lässt er sich abschalten.
+Öffne **OpenRazer Mouse Tray** im KDE-Anwendungsmenü, um die App sofort zu starten. Jedes Paket richtet den Start bei der KDE-Anmeldung ein. Unter **Systemeinstellungen → Autostart** lässt er sich abschalten.
 
 Eine frühere Installation im Benutzerkonto kann Vorrang vor den Einträgen des Pakets haben. Wenn KDE weiterhin eine ältere Kopie startet, prüfe die Dateien namens `local.razer.BasiliskTray.desktop` in `~/.config/autostart` und `~/.local/share/applications`.
 

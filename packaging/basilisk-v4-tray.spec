@@ -1,7 +1,7 @@
 Name:           basilisk-v4-tray
 Version:        %{tray_version}
 Release:        1
-Summary:        KDE tray status and settings for the Razer Basilisk V4 Pro
+Summary:        KDE tray status and settings for OpenRazer mice and receivers
 License:        LicenseRef-Unspecified
 URL:            https://github.com/ashrynsilkstone-ui/basilisk-v4-tray
 Source0:        %{name}-%{version}.tar.gz
@@ -16,9 +16,8 @@ Requires:       qt6-qtwayland
 %global __brp_python_bytecompile %{nil}
 
 %description
-Watch battery, DPI stage and polling rate on a Basilisk V4 Pro over USB or HyperSpeed.
-The KDE tray app configures DPI stages, polling, power and per-zone lighting through
-a compatible OpenRazer driver and daemon.
+View battery, DPI and polling rate for the selected OpenRazer device.
+Configure the supported sensor, power, lighting and receiver settings.
 
 %prep
 %setup -q

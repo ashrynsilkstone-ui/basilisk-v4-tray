@@ -1,7 +1,10 @@
 from dataclasses import dataclass
+from fcntl import ioctl
 import logging
+from pathlib import Path
+import struct
 import sys
-from time import monotonic
+from time import monotonic, sleep
 
 from dbus import DBusException
 from openrazer.client import DaemonNotFound, DeviceManager
@@ -41,6 +44,65 @@ LIGHT_ZONES = {"logo": "Logo", "scroll_wheel": "Scrollrad", "backlight": "Unterb
 LIGHT_EFFECTS = {"none": "Aus", "static": "Statisch", "spectrum": "Farbwechsel", "wave": "Welle"}
 SCROLL_MODES = {0: "Rastend (24 Rastpunkte)", 2: "Rastend (48 Rastpunkte)", 1: "Freilauf"}
 SCROLL_SETTINGS = ("scroll_mode", "scroll_acceleration", "scroll_smart_reel")
+
+
+class ScrollModeError(OSError):
+    pass
+
+
+def scroll_feature_report(device, command_class, command, arguments, expected_prefix=b""):
+    # The hidraw buffer starts with the report ID, followed by the 90-byte Razer report.
+    report = bytearray(91)
+    report[2] = 0x1F
+    report[6:9] = bytes((len(arguments), command_class, command))
+    report[9:9 + len(arguments)] = arguments
+    for value in report[3:89]:
+        report[89] ^= value
+
+    for _ in range(3):
+        if ioctl(device, 0xC05B4806, report) not in (90, 91):  # HIDIOCSFEATURE(91)
+            continue
+        sleep(0.05)
+        reply = bytearray(91)
+        length = ioctl(device, 0xC05B4807, reply)  # HIDIOCGFEATURE(91)
+        # The driver can also be querying the receiver. Ignore unrelated replies.
+        if length != len(reply) or reply[2] != report[2] or reply[7:9] != report[7:9]:
+            continue
+        if reply[1] != 0x02 or reply[6] != len(arguments):
+            continue
+        payload = bytes(reply[9:9 + reply[6]])
+        if payload.startswith(expected_prefix):
+            return payload
+    raise OSError(f"Keine passende Antwort auf den HID-Befehl {command_class:02x}:{command:02x}.")
+
+
+def enable_scroll_modes(serial):
+    # USB interface 3 is the control endpoint on this HyperSpeed receiver.
+    nodes = []
+    for hid in Path("/sys/bus/usb/devices").glob("*:1.3/0003:1532:00E3.*"):
+        if f"HID_UNIQ={serial}" in (hid / "uevent").read_text().splitlines():
+            nodes.extend(hid.glob("hidraw/hidraw*"))
+    if len(nodes) != 1:
+        raise OSError("Der HID-Steueranschluss des Dongles konnte nicht eindeutig zugeordnet werden.")
+
+    with open(Path("/dev") / nodes[0].name, "r+b", buffering=0) as device:
+        info = bytearray(8)
+        ioctl(device, 0x80084803, info)  # HIDIOCGRAWINFO
+        if struct.unpack("=IHH", info) != (0x0003, 0x1532, 0x00E3):
+            raise OSError("Der HID-Steueranschluss gehört nicht zur Basilisk V4 Pro.")
+        profile, = scroll_feature_report(device, 0x05, 0x84, b"\x00")
+        if not 1 <= profile <= 5:
+            raise OSError(f"Die Maus meldet ein ungültiges aktives Profil ({profile}).")
+
+        # Read both masks before changing either. Preserve bits outside the three wheel modes.
+        masks = {}
+        for bank in (0, profile):
+            prefix = bytes((bank,))
+            _, mask = scroll_feature_report(device, 0x15, 0x8B, prefix + b"\x00", prefix)
+            masks[bank] = mask
+        for bank, mask in masks.items():
+            arguments = bytes((bank, mask | 0b111))
+            scroll_feature_report(device, 0x15, 0x0B, arguments, arguments)
 
 
 @dataclass(frozen=True)
@@ -132,6 +194,25 @@ class MouseWorker(QObject):
         except DEVICE_ERRORS:
             self.mark_disconnected()
 
+    def set_scroll_mode(self, mode):
+        self.mouse.scroll_mode = mode
+        sleep(0.5)
+        if self.mouse.scroll_mode == mode:
+            return
+        try:
+            enable_scroll_modes(self.mouse.serial)
+        except PermissionError as exc:
+            raise ScrollModeError(
+                "Der Tray hat keinen HID-Zugriff auf den Dongle. "
+                "Stecke den Dongle neu ein oder melde dich erneut an."
+            ) from exc
+        except OSError as exc:
+            raise ScrollModeError(f"Scrollradmodi konnten nicht freigegeben werden. {exc}") from exc
+        self.mouse.scroll_mode = mode
+        sleep(0.5)
+        if self.mouse.scroll_mode != mode:
+            raise ScrollModeError("Die Maus hat den gewählten Scrollradmodus erneut zurückgewiesen.")
+
     def apply(self, current, changes):
         mouse = self.mouse
         dpi = changes.get("dpi", current.dpi)
@@ -154,9 +235,10 @@ class MouseWorker(QObject):
                 raise ValueError(f"Scrollradeinstellung {key} ist nicht verfügbar.")
         if scroll.get("scroll_smart_reel") is False:
             mouse.scroll_smart_reel = False
-        for key in ("scroll_mode", "scroll_acceleration"):
-            if key in scroll:
-                setattr(mouse, key, scroll[key])
+        if "scroll_mode" in scroll:
+            self.set_scroll_mode(scroll["scroll_mode"])
+        if "scroll_acceleration" in scroll:
+            mouse.scroll_acceleration = scroll["scroll_acceleration"]
         if scroll.get("scroll_smart_reel") is True:
             mouse.scroll_smart_reel = True
         for name, edits in changes.get("lights", {}).items():
@@ -182,6 +264,9 @@ class MouseWorker(QObject):
         if changes:
             try:
                 self.apply(self.read(), changes)
+            except ScrollModeError as exc:
+                logging.warning("Scrollradmodus übernehmen: %s", exc)
+                error = str(exc)
             except DEVICE_ERRORS as exc:
                 logging.warning("Einstellungen übernehmen: %s", exc)
                 error = "Die Maus konnte die Einstellungen nur teilweise oder gar nicht übernehmen."

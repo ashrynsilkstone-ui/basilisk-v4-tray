@@ -1,0 +1,3 @@
+# Grant the logged-in desktop user access to the Basilisk dongle's USB control interface.
+SUBSYSTEM=="hidraw", KERNELS=="0003:1532:00E3.*", ENV{.basilisk_v4_tray_receiver}="1"
+SUBSYSTEM=="hidraw", ENV{.basilisk_v4_tray_receiver}=="1", ATTRS{bInterfaceNumber}=="03", TAG+="uaccess"

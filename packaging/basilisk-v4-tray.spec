@@ -30,5 +30,6 @@ sh packaging/stage.sh "%{buildroot}"
 %{_bindir}/basilisk-v4-tray
 %{_datadir}/applications/local.razer.BasiliskTray.desktop
 %{_datadir}/basilisk-v4-tray/
+/usr/lib/udev/rules.d/69-basilisk-v4-tray.rules
 %config(noreplace) %{_sysconfdir}/xdg/autostart/local.razer.BasiliskTray.desktop
 %{_docdir}/basilisk-v4-tray/

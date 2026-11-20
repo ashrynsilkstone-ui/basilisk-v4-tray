@@ -38,7 +38,11 @@ NAME = "Basilisk V4 Pro"
 DESKTOP_ID = "local.razer.BasiliskTray"
 BUS_PATH = "/BasiliskTray"
 DEVICE_ERRORS = (DBusException, DaemonNotFound, OSError, ValueError)
-DISCONNECTED = "Warte auf den HyperSpeed-Dongle …"
+DISCONNECTED = "Warte auf die Basilisk V4 Pro …"
+BASILISK_VENDOR = 0x1532
+BASILISK_WIRED = 0x00E2
+BASILISK_RECEIVER = 0x00E3
+USB_DEVICES = Path("/sys/bus/usb/devices")
 DEFAULT_STAGES = (1200, 1600, 2400, 3200, 6400)
 LIGHT_ZONES = {"logo": "Logo", "scroll_wheel": "Scrollrad", "backlight": "Unterboden"}
 LIGHT_EFFECTS = {"none": "Aus", "static": "Statisch", "spectrum": "Farbwechsel", "wave": "Welle"}
@@ -73,7 +77,7 @@ def scroll_feature_report(device, command_class, command, arguments, expected_pr
         sleep(0.05)
         reply = bytearray(91)
         length = ioctl(device, 0xC05B4807, reply)  # HIDIOCGFEATURE(91)
-        # The driver can also be querying the receiver. Ignore unrelated replies.
+        # The driver can also be querying the mouse. Ignore unrelated replies.
         if length != len(reply) or reply[2] != report[2] or reply[7:9] != report[7:9]:
             continue
         if reply[1] != 0x02 or reply[6] != len(arguments):
@@ -84,20 +88,23 @@ def scroll_feature_report(device, command_class, command, arguments, expected_pr
     raise OSError(f"Keine passende Antwort auf den HID-Befehl {command_class:02x}:{command:02x}.")
 
 
-def open_scroll_receiver(serial):
-    # USB interface 3 is the control endpoint on this HyperSpeed receiver.
+def control_interfaces(product_id):
+    return USB_DEVICES.glob(f"*:1.3/0003:{BASILISK_VENDOR:04X}:{product_id:04X}.*")
+
+
+def open_scroll_device(serial, product_id):
     nodes = []
-    for hid in Path("/sys/bus/usb/devices").glob("*:1.3/0003:1532:00E3.*"):
+    for hid in control_interfaces(product_id):
         if f"HID_UNIQ={serial}" in (hid / "uevent").read_text().splitlines():
             nodes.extend(hid.glob("hidraw/hidraw*"))
     if len(nodes) != 1:
-        raise OSError("Der HID-Steueranschluss des Dongles konnte nicht eindeutig zugeordnet werden.")
+        raise OSError("Die HID-Steuerschnittstelle der Maus konnte nicht eindeutig zugeordnet werden.")
 
     device = open(Path("/dev") / nodes[0].name, "r+b", buffering=0)
     info = bytearray(8)
     try:
         ioctl(device, 0x80084803, info)  # HIDIOCGRAWINFO
-        if struct.unpack("=IHH", info) != (0x0003, 0x1532, 0x00E3):
+        if struct.unpack("=IHH", info) != (0x0003, BASILISK_VENDOR, product_id):
             raise OSError("Der HID-Steueranschluss gehört nicht zur Basilisk V4 Pro.")
     except OSError:
         device.close()
@@ -178,21 +185,23 @@ class MouseWorker(QObject):
     def __init__(self):
         super().__init__()
         self.mouse = None
+        self.product_id = None
         self.battery = (0, False)
         self.next_battery_check = None
 
     def scroll_cycle_key(self, profile):
-        return f"scroll-cycle/{self.mouse.serial}/{profile}"
+        prefix = "scroll-cycle/wired" if self.product_id == BASILISK_WIRED else "scroll-cycle"
+        return f"{prefix}/{self.mouse.serial}/{profile}"
 
     def read_scroll_cycle(self):
         if not getattr(self.mouse, "serial", None):
             return None, None, False
-        with open_scroll_receiver(self.mouse.serial) as device:
+        with open_scroll_device(self.mouse.serial, self.product_id) as device:
             profile = active_scroll_profile(device)
             live = read_scroll_mask(device, 0) & 0b111
         if live in SCROLL_CYCLES:
             return profile, live, False
-        # This receiver can echo a zero mask even after acknowledging a successful write.
+        # The firmware can echo a zero mask even after acknowledging a successful write.
         saved = QSettings("BasiliskV4Tray", "BasiliskV4Tray").value(
             self.scroll_cycle_key(profile), 0, type=int
         )
@@ -201,7 +210,7 @@ class MouseWorker(QObject):
     def set_scroll_cycle(self, profile, cycle):
         if cycle not in SCROLL_CYCLES:
             raise ScrollModeError("Wähle mindestens zwei Modi für die Umschalttaste.")
-        with open_scroll_receiver(self.mouse.serial) as device:
+        with open_scroll_device(self.mouse.serial, self.product_id) as device:
             if active_scroll_profile(device) != profile:
                 raise ScrollModeError("Das Mausprofil wurde gewechselt. Wähle die Modi erneut.")
             write_scroll_cycle(device, profile, cycle)
@@ -210,10 +219,17 @@ class MouseWorker(QObject):
         preferences.sync()
 
     def read(self, refresh_battery=False):
-        if self.mouse is None:
+        product_id = next((pid for pid in (BASILISK_WIRED, BASILISK_RECEIVER)
+                           if next(control_interfaces(pid), None) is not None), None)
+        if self.mouse is None or product_id != self.product_id:
+            self.product_id = product_id
+            self.next_battery_check = None
+            self.mouse = None
+            if product_id is None:
+                raise DaemonNotFound(DISCONNECTED)
             self.mouse = next(
                 (device for device in DeviceManager().devices
-                 if (device._vid, device._pid) == (0x1532, 0x00E3)),
+                 if (device._vid, device._pid) == (BASILISK_VENDOR, product_id)),
                 None,
             )
         if self.mouse is None:
@@ -255,7 +271,7 @@ class MouseWorker(QObject):
             return
         repair_error = None
         try:
-            with open_scroll_receiver(self.mouse.serial) as device:
+            with open_scroll_device(self.mouse.serial, self.product_id) as device:
                 profile = active_scroll_profile(device)
                 live = read_scroll_mask(device, 0) & 0b111
                 repair_cycle = cycle if cycle is not None else 0b111
@@ -270,8 +286,8 @@ class MouseWorker(QObject):
             return
         if isinstance(repair_error, PermissionError):
             raise ScrollModeError(
-                "Der Tray hat keinen HID-Zugriff auf den Dongle. "
-                "Stecke den Dongle neu ein oder melde dich erneut an."
+                "Der Tray hat keinen HID-Zugriff auf die Maus. "
+                "Verbinde die Maus erneut oder melde dich erneut an."
             ) from repair_error
         if repair_error is not None:
             raise ScrollModeError(
@@ -676,11 +692,11 @@ class SettingsDialog(QDialog):
         self.scroll_cycle.setCurrentIndex(max(0, self.scroll_cycle.findData(state.scroll_cycle)))
         self.scroll_cycle.setEnabled(state.scroll_profile is not None)
         if state.scroll_profile is None:
-            note = "Die Umschalttaste benötigt Zugriff auf den Dongle."
+            note = "Die Umschalttaste benötigt Zugriff auf die USB-Steuerschnittstelle."
         elif state.scroll_cycle_cached:
             note = "Zuletzt im Tray für das aktive Mausprofil gespeichert."
         elif state.scroll_cycle is None:
-            note = "Der Dongle meldet die aktuelle Auswahl nicht zurück."
+            note = "Die Maus meldet die aktuelle Auswahl nicht zurück."
         else:
             note = ""
         self.scroll_cycle_note.setText(note)

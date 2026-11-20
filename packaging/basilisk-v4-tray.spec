@@ -16,7 +16,7 @@ Requires:       qt6-qtwayland
 %global __brp_python_bytecompile %{nil}
 
 %description
-Watch battery, DPI stage and polling rate on a HyperSpeed-connected Basilisk V4 Pro.
+Watch battery, DPI stage and polling rate on a Basilisk V4 Pro over USB or HyperSpeed.
 The KDE tray app configures DPI stages, polling, power and per-zone lighting through
 a compatible OpenRazer driver and daemon.
 

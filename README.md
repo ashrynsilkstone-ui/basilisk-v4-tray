@@ -10,9 +10,12 @@ Click the icon to open the settings. You can configure up to five DPI stages wit
 
 On the **Scroll wheel** tab, choose free spin or a tactile mode with 24 or 48 notches. You can also adjust scroll acceleration and Smart Reel, which switches to free spin automatically when you scroll quickly. **Smart Reel sensitivity** has five levels stored in the active mouse profile. Click **Apply** to save your changes.
 
-For Smart Reel, choose a combination with **Free spin** under **Modes to cycle through**. The available combinations are **24 notches and free spin**, **48 notches and free spin**, and **All three modes**. The **24 and 48 notches** combination keeps the wheel in tactile modes.
+In testing, Smart Reel responded with these settings.
 
-**Mode → Free spin** makes the wheel spin freely immediately. In the USB test, Smart Reel switched briefly from **Tactile (24 notches)** to **Free spin** after a quick flick.
+- **Mode → Free spin**
+- **Modes to cycle through → 24 notches and free spin** or **48 notches and free spin**
+
+With a 24- or 48-notch tactile mode and free spin disabled for mode switching, the wheel stays tactile when flicked. The **24 and 48 notches** combination behaves this way.
 
 Use **Modes to cycle through** to choose which two or three modes the button already assigned to wheel-mode switching cycles through in the active mouse profile. The tray switches to an enabled mode if needed. When the mouse does not report the selection, the tray shows its last saved choice for that profile and connection. If the mouse rejects a mode, the tray reapplies the selected modes and tries again. The packaged udev rule gives the local desktop session access to the USB control interface for both connections. Reconnect the USB cable or the receiver after installation if access is denied.
 

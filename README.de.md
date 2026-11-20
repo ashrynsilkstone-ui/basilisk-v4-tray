@@ -10,9 +10,12 @@ Ein Klick auf das Symbol öffnet die Einstellungen. Dort kannst du bis zu fünf 
 
 Im Reiter **Scrollrad** kannst du zwischen Freilauf und 24 oder 48 Rastpunkten wählen. Außerdem kannst du die Scrollbeschleunigung und Smart Reel einstellen. Smart Reel wechselt bei schnellem Scrollen automatisch in den Freilauf. Die **Smart-Reel-Empfindlichkeit** hat fünf Stufen, die im aktiven Mausprofil gespeichert werden. Klick auf **Übernehmen**, um deine Änderungen zu speichern.
 
-Für Smart Reel muss unter **Modi beim Umschalten** der **Freilauf** freigegeben sein. Wähle **24 Rastpunkte und Freilauf**, **48 Rastpunkte und Freilauf** oder **Alle drei Modi**. Die Auswahl **24 und 48 Rastpunkte** hält das Rad in den Rastmodi.
+In den bisherigen Tests reagierte Smart Reel bei diesen Einstellungen.
 
-Mit **Modus → Freilauf** läuft das Rad sofort frei. Beim USB-Test wechselte Smart Reel nach einem schnellen Schwung kurz von **Rastend (24 Rastpunkte)** in den **Freilauf**.
+- **Modus → Freilauf**
+- **Modi beim Umschalten → 24 Rastpunkte und Freilauf** oder **48 Rastpunkte und Freilauf**
+
+Bei 24 oder 48 Rastpunkten ohne freigegebenen Freilauf bleibt das Rad beim schnellen Drehen im Rastmodus, etwa mit der Umschaltkombination **24 und 48 Rastpunkte**.
 
 Unter **Modi beim Umschalten** wählst du, welche zwei oder drei Modi die im aktiven Mausprofil bereits dafür belegte Taste durchläuft. Der Tray wechselt bei Bedarf auf einen freigegebenen Modus. Liefert die Maus keine Auswahl zurück, zeigt der Tray die zuletzt für dieses Profil und diese Verbindung gespeicherte Auswahl. Weist die Maus einen Modus zurück, sendet der Tray die ausgewählten Modi erneut. Die udev-Regel im Paket gibt der lokalen Desktop-Sitzung Zugriff auf die USB-Steuerschnittstelle beider Verbindungen. Falls der Zugriff nach der Installation fehlt, stecke das USB-Kabel oder den Dongle neu ein.
 

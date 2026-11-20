@@ -10,7 +10,7 @@ from dbus import DBusException
 from openrazer.client import DaemonNotFound, DeviceManager
 
 try:
-    from PySide6.QtCore import ClassInfo, QObject, QRectF, Qt, QThread, QTimer, Signal, Slot
+    from PySide6.QtCore import ClassInfo, QObject, QRectF, QSettings, Qt, QThread, QTimer, Signal, Slot
     from PySide6.QtDBus import QDBus, QDBusAbstractAdaptor, QDBusConnection, QDBusMessage
     from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
     from PySide6.QtWidgets import (
@@ -21,7 +21,7 @@ try:
 except ModuleNotFoundError as error:
     if not (error.name or "").startswith("PySide6"):
         raise
-    from PyQt6.QtCore import QObject, QRectF, Qt, QThread, QTimer
+    from PyQt6.QtCore import QObject, QRectF, QSettings, Qt, QThread, QTimer
     from PyQt6.QtCore import pyqtClassInfo
     from PyQt6.QtCore import pyqtSignal as Signal, pyqtSlot as Slot
     from PyQt6.QtDBus import QDBus, QDBusAbstractAdaptor, QDBusConnection, QDBusMessage
@@ -44,6 +44,12 @@ LIGHT_ZONES = {"logo": "Logo", "scroll_wheel": "Scrollrad", "backlight": "Unterb
 LIGHT_EFFECTS = {"none": "Aus", "static": "Statisch", "spectrum": "Farbwechsel", "wave": "Welle"}
 SCROLL_MODES = {0: "Rastend (24 Rastpunkte)", 2: "Rastend (48 Rastpunkte)", 1: "Freilauf"}
 SCROLL_SETTINGS = ("scroll_mode", "scroll_acceleration", "scroll_smart_reel")
+SCROLL_CYCLES = {
+    0b101: "24 und 48 Rastpunkte",
+    0b011: "24 Rastpunkte und Freilauf",
+    0b110: "48 Rastpunkte und Freilauf",
+    0b111: "Alle drei Modi",
+}
 
 
 class ScrollModeError(OSError):
@@ -78,7 +84,7 @@ def scroll_feature_report(device, command_class, command, arguments, expected_pr
     raise OSError(f"Keine passende Antwort auf den HID-Befehl {command_class:02x}:{command:02x}.")
 
 
-def enable_scroll_modes(serial):
+def open_scroll_receiver(serial):
     # USB interface 3 is the control endpoint on this HyperSpeed receiver.
     nodes = []
     for hid in Path("/sys/bus/usb/devices").glob("*:1.3/0003:1532:00E3.*"):
@@ -87,24 +93,37 @@ def enable_scroll_modes(serial):
     if len(nodes) != 1:
         raise OSError("Der HID-Steueranschluss des Dongles konnte nicht eindeutig zugeordnet werden.")
 
-    with open(Path("/dev") / nodes[0].name, "r+b", buffering=0) as device:
-        info = bytearray(8)
+    device = open(Path("/dev") / nodes[0].name, "r+b", buffering=0)
+    info = bytearray(8)
+    try:
         ioctl(device, 0x80084803, info)  # HIDIOCGRAWINFO
         if struct.unpack("=IHH", info) != (0x0003, 0x1532, 0x00E3):
             raise OSError("Der HID-Steueranschluss gehört nicht zur Basilisk V4 Pro.")
-        profile, = scroll_feature_report(device, 0x05, 0x84, b"\x00")
-        if not 1 <= profile <= 5:
-            raise OSError(f"Die Maus meldet ein ungültiges aktives Profil ({profile}).")
+    except OSError:
+        device.close()
+        raise
+    return device
 
-        # Read both masks before changing either. Preserve bits outside the three wheel modes.
-        masks = {}
-        for bank in (0, profile):
-            prefix = bytes((bank,))
-            _, mask = scroll_feature_report(device, 0x15, 0x8B, prefix + b"\x00", prefix)
-            masks[bank] = mask
-        for bank, mask in masks.items():
-            arguments = bytes((bank, mask | 0b111))
-            scroll_feature_report(device, 0x15, 0x0B, arguments, arguments)
+
+def active_scroll_profile(device):
+    profile, = scroll_feature_report(device, 0x05, 0x84, b"\x00")
+    if not 1 <= profile <= 5:
+        raise OSError(f"Die Maus meldet ein ungültiges aktives Profil ({profile}).")
+    return profile
+
+
+def read_scroll_mask(device, bank):
+    prefix = bytes((bank,))
+    _, mask = scroll_feature_report(device, 0x15, 0x8B, prefix + b"\x00", prefix)
+    return mask
+
+
+def write_scroll_cycle(device, profile, cycle):
+    # Update the saved profile first, then the live slot. Preserve unrelated bits.
+    masks = {bank: read_scroll_mask(device, bank) for bank in (profile, 0)}
+    for bank, mask in masks.items():
+        arguments = bytes((bank, (mask & ~0b111) | cycle))
+        scroll_feature_report(device, 0x15, 0x0B, arguments, arguments)
 
 
 @dataclass(frozen=True)
@@ -134,6 +153,9 @@ class Settings:
     idle: int
     lights: dict[str, "Light"]
     scroll: dict[str, int | bool]
+    scroll_profile: int | None = None
+    scroll_cycle: int | None = None
+    scroll_cycle_cached: bool = False
 
 
 @dataclass(frozen=True)
@@ -158,6 +180,34 @@ class MouseWorker(QObject):
         self.mouse = None
         self.battery = (0, False)
         self.next_battery_check = None
+
+    def scroll_cycle_key(self, profile):
+        return f"scroll-cycle/{self.mouse.serial}/{profile}"
+
+    def read_scroll_cycle(self):
+        if not getattr(self.mouse, "serial", None):
+            return None, None, False
+        with open_scroll_receiver(self.mouse.serial) as device:
+            profile = active_scroll_profile(device)
+            live = read_scroll_mask(device, 0) & 0b111
+        if live in SCROLL_CYCLES:
+            return profile, live, False
+        # This receiver can echo a zero mask even after acknowledging a successful write.
+        saved = QSettings("BasiliskV4Tray", "BasiliskV4Tray").value(
+            self.scroll_cycle_key(profile), 0, type=int
+        )
+        return profile, saved if saved in SCROLL_CYCLES else None, saved in SCROLL_CYCLES
+
+    def set_scroll_cycle(self, profile, cycle):
+        if cycle not in SCROLL_CYCLES:
+            raise ScrollModeError("Wähle mindestens zwei Modi für die Umschalttaste.")
+        with open_scroll_receiver(self.mouse.serial) as device:
+            if active_scroll_profile(device) != profile:
+                raise ScrollModeError("Das Mausprofil wurde gewechselt. Wähle die Modi erneut.")
+            write_scroll_cycle(device, profile, cycle)
+        preferences = QSettings("BasiliskV4Tray", "BasiliskV4Tray")
+        preferences.setValue(self.scroll_cycle_key(profile), cycle)
+        preferences.sync()
 
     def read(self, refresh_battery=False):
         if self.mouse is None:
@@ -196,14 +246,22 @@ class MouseWorker(QObject):
         except DEVICE_ERRORS:
             self.mark_disconnected()
 
-    def set_scroll_mode(self, mode):
+    def set_scroll_mode(self, mode, cycle=None):
+        if cycle is not None and not cycle & (1 << mode):
+            raise ScrollModeError("Wähle den gewünschten Modus zuerst unter Umschalttaste aus.")
         self.mouse.scroll_mode = mode
         sleep(0.5)
         if self.mouse.scroll_mode == mode:
             return
         repair_error = None
         try:
-            enable_scroll_modes(self.mouse.serial)
+            with open_scroll_receiver(self.mouse.serial) as device:
+                profile = active_scroll_profile(device)
+                live = read_scroll_mask(device, 0) & 0b111
+                repair_cycle = cycle if cycle is not None else 0b111
+                if cycle is None and live in SCROLL_CYCLES:
+                    repair_cycle = live
+                write_scroll_cycle(device, profile, repair_cycle)
         except OSError as exc:
             repair_error = exc
         self.mouse.scroll_mode = mode
@@ -243,8 +301,23 @@ class MouseWorker(QObject):
                 raise ValueError(f"Scrollradeinstellung {key} ist nicht verfügbar.")
         if scroll.get("scroll_smart_reel") is False:
             mouse.scroll_smart_reel = False
-        if "scroll_mode" in scroll:
-            self.set_scroll_mode(scroll["scroll_mode"])
+        cycle_edit = changes.get("scroll_cycle")
+        mode = scroll.get("scroll_mode")
+        cycle = None
+        if cycle_edit is not None:
+            profile, cycle = cycle_edit
+            if mode is not None and not cycle & (1 << mode):
+                raise ScrollModeError("Wähle einen Modus aus, der zur Umschalttaste gehört.")
+            self.set_scroll_cycle(profile, cycle)
+            if mode is None and not cycle & (1 << mouse.scroll_mode):
+                mode = next(value for value in SCROLL_MODES if cycle & (1 << value))
+        elif mode is not None:
+            try:
+                _, cycle, _ = self.read_scroll_cycle()
+            except OSError:
+                pass  # Ordinary OpenRazer controls can work without hidraw access.
+        if mode is not None:
+            self.set_scroll_mode(mode, cycle)
         if "scroll_acceleration" in scroll:
             mouse.scroll_acceleration = scroll["scroll_acceleration"]
         if scroll.get("scroll_smart_reel") is True:
@@ -287,8 +360,15 @@ class MouseWorker(QObject):
                 if zone is not None:
                     lights[name] = Light.read(zone)
             scroll = {key: getattr(self.mouse, key) for key in SCROLL_SETTINGS if self.mouse.has(key)}
+            profile, cycle, cached = None, None, False
+            if "scroll_mode" in scroll:
+                try:
+                    profile, cycle, cached = self.read_scroll_cycle()
+                except OSError as exc:
+                    logging.debug("Modi der Umschalttaste lesen: %s", exc)
             state = Settings(reading, self.mouse.max_dpi, tuple(self.mouse.supported_poll_rates),
-                             self.mouse.get_low_battery_threshold(), self.mouse.get_idle_time(), lights, scroll)
+                             self.mouse.get_low_battery_threshold(), self.mouse.get_idle_time(),
+                             lights, scroll, profile, cycle, cached)
             self.updated.emit(reading)
         except DEVICE_ERRORS as exc:
             logging.warning("Einstellungen lesen: %s", exc)
@@ -300,10 +380,12 @@ class MouseWorker(QObject):
                   "threshold": state.threshold, "idle": state.idle}
         if changes and not error:
             changed_values = ((actual[key], value) for key, value in changes.items()
-                              if key not in ("lights", "scroll"))
+                              if key not in ("lights", "scroll", "scroll_cycle"))
             changed_lights = ((getattr(lights.get(name), key, None), value)
                               for name, edits in changes.get("lights", {}).items() for key, value in edits.items())
             changed_scroll = ((scroll.get(key), value) for key, value in changes.get("scroll", {}).items())
+            if "scroll_cycle" in changes:
+                changed_scroll = (*changed_scroll, ((profile, cycle), changes["scroll_cycle"]))
             if any(current != requested for current, requested in
                    (*changed_values, *changed_lights, *changed_scroll)):
                 error = "Einige Werte wurden von der Maus anders zurückgemeldet. Die aktuellen Werte sind unten eingetragen."
@@ -492,12 +574,17 @@ class SettingsDialog(QDialog):
         self.scroll_page = QWidget()
         scroll = QFormLayout(self.scroll_page)
         self.scroll_mode = QComboBox()
+        self.scroll_cycle = QComboBox()
+        self.scroll_cycle_note = QLabel()
+        self.scroll_cycle_note.setWordWrap(True)
         self.scroll_acceleration = QCheckBox("Scrollbeschleunigung aktivieren")
         self.scroll_smart_reel = QCheckBox("Smart Reel aktivieren")
         self.scroll_smart_reel.setToolTip("Wechselt bei schnellem Scrollen automatisch in den Freilauf.")
         self.scroll_unavailable = QLabel("OpenRazer meldet keine Scrollrad-Einstellungen für diese Maus.")
         self.scroll_unavailable.setWordWrap(True)
         scroll.addRow("Modus", self.scroll_mode)
+        scroll.addRow("Umschalttaste", self.scroll_cycle)
+        scroll.addRow(self.scroll_cycle_note)
         scroll.addRow(self.scroll_acceleration)
         scroll.addRow(self.scroll_smart_reel)
         scroll.addRow(self.scroll_unavailable)
@@ -573,6 +660,25 @@ class SettingsDialog(QDialog):
         for name, controls in self.lights.items():
             controls.load(state.lights.get(name))
         self.load_scroll(state.scroll)
+        self.load_scroll_cycle(state)
+
+    def load_scroll_cycle(self, state):
+        self.scroll_cycle.clear()
+        self.scroll_cycle.addItem("Modi auswählen …", None)
+        for cycle, label in SCROLL_CYCLES.items():
+            self.scroll_cycle.addItem(label, cycle)
+        self.scroll_cycle.setCurrentIndex(max(0, self.scroll_cycle.findData(state.scroll_cycle)))
+        self.scroll_cycle.setEnabled(state.scroll_profile is not None)
+        if state.scroll_profile is None:
+            note = "Die Umschalttaste benötigt Zugriff auf den Dongle."
+        elif state.scroll_cycle_cached:
+            note = "Zuletzt im Tray für das aktive Mausprofil gespeichert."
+        elif state.scroll_cycle is None:
+            note = "Der Dongle meldet die aktuelle Auswahl nicht zurück."
+        else:
+            note = ""
+        self.scroll_cycle_note.setText(note)
+        self.scroll_cycle_note.setVisible(bool(note))
 
     def load_scroll(self, scroll):
         form = self.scroll_page.layout()
@@ -629,6 +735,9 @@ class SettingsDialog(QDialog):
         }
         if scroll_edits:
             changes["scroll"] = scroll_edits
+        cycle = self.scroll_cycle.currentData()
+        if state.scroll_profile is not None and cycle is not None and cycle != state.scroll_cycle:
+            changes["scroll_cycle"] = state.scroll_profile, cycle
         if not changes and self.tabs.currentIndex() == 0:
             changes["polling"] = self.polling.currentData()
         if changes:

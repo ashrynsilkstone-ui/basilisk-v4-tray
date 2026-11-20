@@ -46,7 +46,8 @@ USB_DEVICES = Path("/sys/bus/usb/devices")
 DEFAULT_STAGES = (1200, 1600, 2400, 3200, 6400)
 LIGHT_ZONES = {"logo": "Logo", "scroll_wheel": "Scrollrad", "backlight": "Unterboden"}
 LIGHT_EFFECTS = {"none": "Aus", "static": "Statisch", "spectrum": "Farbwechsel", "wave": "Welle"}
-SCROLL_MODES = {0: "Rastend (24 Rastpunkte)", 2: "Rastend (48 Rastpunkte)", 1: "Freilauf"}
+FREE_SPIN = 1
+SCROLL_MODES = {0: "Rastend (24 Rastpunkte)", 2: "Rastend (48 Rastpunkte)", FREE_SPIN: "Freilauf"}
 SCROLL_SETTINGS = ("scroll_mode", "scroll_acceleration", "scroll_smart_reel")
 SCROLL_CYCLES = {
     0b101: "24 und 48 Rastpunkte",
@@ -163,6 +164,7 @@ class Settings:
     scroll_profile: int | None = None
     scroll_cycle: int | None = None
     scroll_cycle_cached: bool = False
+    wired: bool = False
 
 
 @dataclass(frozen=True)
@@ -297,6 +299,32 @@ class MouseWorker(QObject):
 
     def apply(self, current, changes):
         mouse = self.mouse
+        scroll = changes.get("scroll", {})
+        for key in SCROLL_SETTINGS:
+            if key in scroll and not mouse.has(key):
+                raise ValueError(f"Scrollradeinstellung {key} ist nicht verfügbar.")
+        smart_reel = scroll.get("scroll_smart_reel")
+        cycle_edit = changes.get("scroll_cycle")
+        mode = scroll.get("scroll_mode")
+        needs_free_spin = self.product_id == BASILISK_WIRED and (
+            smart_reel is True
+            or (cycle_edit is not None and smart_reel is None
+                and mouse.has("scroll_smart_reel") and mouse.scroll_smart_reel)
+        )
+        cycle = cycle_edit[1] if cycle_edit is not None else None
+        if cycle_edit is None and (mode is not None or needs_free_spin):
+            try:
+                _, cycle, _ = self.read_scroll_cycle()
+            except OSError:
+                pass  # Ordinary OpenRazer controls can work without hidraw access.
+        if needs_free_spin and (cycle is None or not cycle & (1 << FREE_SPIN)):
+            raise ScrollModeError(
+                "Smart Reel braucht am USB-Kabel Freilauf. Wähle unter Umschalttaste "
+                "eine Auswahl mit Freilauf oder schalte Smart Reel aus."
+            )
+        if cycle_edit is not None and mode is not None and not cycle & (1 << mode):
+            raise ScrollModeError("Wähle einen Modus aus, der zur Umschalttaste gehört.")
+
         dpi = changes.get("dpi", current.dpi)
         stage = changes.get("stage", min(max(current.stage, 1), len(dpi)))
         if ("dpi" in changes or "stage" in changes) and (stage, dpi) != (current.stage, current.dpi):
@@ -311,32 +339,18 @@ class MouseWorker(QObject):
             mouse.set_low_battery_threshold(changes["threshold"])
         if "idle" in changes and changes["idle"] != mouse.get_idle_time():
             mouse.set_idle_time(changes["idle"])
-        scroll = changes.get("scroll", {})
-        for key in SCROLL_SETTINGS:
-            if key in scroll and not mouse.has(key):
-                raise ValueError(f"Scrollradeinstellung {key} ist nicht verfügbar.")
-        if scroll.get("scroll_smart_reel") is False:
+        if smart_reel is False:
             mouse.scroll_smart_reel = False
-        cycle_edit = changes.get("scroll_cycle")
-        mode = scroll.get("scroll_mode")
-        cycle = None
         if cycle_edit is not None:
             profile, cycle = cycle_edit
-            if mode is not None and not cycle & (1 << mode):
-                raise ScrollModeError("Wähle einen Modus aus, der zur Umschalttaste gehört.")
             self.set_scroll_cycle(profile, cycle)
             if mode is None and not cycle & (1 << mouse.scroll_mode):
                 mode = next(value for value in SCROLL_MODES if cycle & (1 << value))
-        elif mode is not None:
-            try:
-                _, cycle, _ = self.read_scroll_cycle()
-            except OSError:
-                pass  # Ordinary OpenRazer controls can work without hidraw access.
         if mode is not None:
             self.set_scroll_mode(mode, cycle)
         if "scroll_acceleration" in scroll:
             mouse.scroll_acceleration = scroll["scroll_acceleration"]
-        if scroll.get("scroll_smart_reel") is True:
+        if smart_reel is True:
             mouse.scroll_smart_reel = True
         for name, edits in changes.get("lights", {}).items():
             zone = getattr(mouse.fx.misc, name)
@@ -384,7 +398,8 @@ class MouseWorker(QObject):
                     logging.debug("Modi der Umschalttaste lesen: %s", exc)
             state = Settings(reading, self.mouse.max_dpi, tuple(self.mouse.supported_poll_rates),
                              self.mouse.get_low_battery_threshold(), self.mouse.get_idle_time(),
-                             lights, scroll, profile, cycle, cached)
+                             lights, scroll, profile, cycle, cached,
+                             wired=self.product_id == BASILISK_WIRED)
             self.updated.emit(reading)
         except DEVICE_ERRORS as exc:
             logging.warning("Einstellungen lesen: %s", exc)
@@ -602,6 +617,8 @@ class SettingsDialog(QDialog):
         self.scroll_acceleration = QCheckBox("Scrollbeschleunigung aktivieren")
         self.scroll_smart_reel = QCheckBox("Smart Reel aktivieren")
         self.scroll_smart_reel.setToolTip("Wechselt bei schnellem Scrollen automatisch in den Freilauf.")
+        self.scroll_smart_reel_note = QLabel("Am USB-Kabel braucht Smart Reel eine Umschalttaste mit Freilauf.")
+        self.scroll_smart_reel_note.setWordWrap(True)
         self.scroll_unavailable = QLabel("OpenRazer meldet keine Scrollrad-Einstellungen für diese Maus.")
         self.scroll_unavailable.setWordWrap(True)
         scroll.addRow("Modus", self.scroll_mode)
@@ -609,6 +626,7 @@ class SettingsDialog(QDialog):
         scroll.addRow(self.scroll_cycle_note)
         scroll.addRow(self.scroll_acceleration)
         scroll.addRow(self.scroll_smart_reel)
+        scroll.addRow(self.scroll_smart_reel_note)
         scroll.addRow(self.scroll_unavailable)
         self.scroll_unavailable.hide()
         self.tabs.addTab(self.scroll_page, "Scrollrad")
@@ -683,6 +701,7 @@ class SettingsDialog(QDialog):
             controls.load(state.lights.get(name))
         self.load_scroll(state.scroll)
         self.load_scroll_cycle(state)
+        self.scroll_smart_reel_note.setVisible(state.wired and "scroll_smart_reel" in state.scroll)
 
     def load_scroll_cycle(self, state):
         self.scroll_cycle.clear()

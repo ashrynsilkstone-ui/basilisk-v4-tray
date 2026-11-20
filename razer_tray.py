@@ -49,6 +49,8 @@ LIGHT_EFFECTS = {"none": "Aus", "static": "Statisch", "spectrum": "Farbwechsel",
 FREE_SPIN = 1
 SCROLL_MODES = {0: "Rastend (24 Rastpunkte)", 2: "Rastend (48 Rastpunkte)", FREE_SPIN: "Freilauf"}
 SCROLL_SETTINGS = ("scroll_mode", "scroll_acceleration", "scroll_smart_reel")
+SMART_REEL_LEVELS = range(5)
+SCROLL_CYCLE_LABEL = "Modi beim Umschalten"
 SCROLL_CYCLES = {
     0b101: "24 und 48 Rastpunkte",
     0b011: "24 Rastpunkte und Freilauf",
@@ -75,17 +77,19 @@ def scroll_feature_report(device, command_class, command, arguments, expected_pr
             sleep(backoff)
         if ioctl(device, 0xC05B4806, report) not in (90, 91):  # HIDIOCSFEATURE(91)
             continue
-        sleep(0.05)
-        reply = bytearray(91)
-        length = ioctl(device, 0xC05B4807, reply)  # HIDIOCGFEATURE(91)
-        # The driver can also be querying the mouse. Ignore unrelated replies.
-        if length != len(reply) or reply[2] != report[2] or reply[7:9] != report[7:9]:
-            continue
-        if reply[1] != 0x02 or reply[6] != len(arguments):
-            continue
-        payload = bytes(reply[9:9 + reply[6]])
-        if payload.startswith(expected_prefix):
-            return payload
+        # Read promptly before the driver issues another command. Allow a busy
+        # receiver time to deliver the reply before resending the request.
+        for delay in (0.012, 0.024, 0.05):
+            sleep(delay)
+            reply = bytearray(91)
+            length = ioctl(device, 0xC05B4807, reply)  # HIDIOCGFEATURE(91)
+            if length != len(reply) or reply[2] != report[2] or reply[7:9] != report[7:9]:
+                continue
+            if reply[1] != 0x02 or reply[6] != len(arguments):
+                continue
+            payload = bytes(reply[9:9 + reply[6]])
+            if payload.startswith(expected_prefix):
+                return payload
     raise OSError(f"Keine passende Antwort auf den HID-Befehl {command_class:02x}:{command:02x}.")
 
 
@@ -134,6 +138,36 @@ def write_scroll_cycle(device, profile, cycle):
         scroll_feature_report(device, 0x15, 0x0B, arguments, arguments)
 
 
+def read_smart_reel_level(device, bank):
+    prefix = bytes((bank,))
+    _, level = scroll_feature_report(device, 0x02, 0xA3, prefix + b"\x00", prefix)
+    if level not in SMART_REEL_LEVELS:
+        raise ScrollModeError(f"Die Maus meldet eine ungültige Smart-Reel-Stufe ({level + 1}).")
+    return level
+
+
+def write_smart_reel_level(device, profile, level):
+    levels = {bank: read_smart_reel_level(device, bank) for bank in (profile, 0)}
+    if all(previous == level for previous in levels.values()):
+        return
+
+    try:
+        for bank in levels:
+            arguments = bytes((bank, level))
+            scroll_feature_report(device, 0x02, 0x23, arguments, arguments)
+        if any(read_smart_reel_level(device, bank) != level for bank in levels):
+            raise ScrollModeError("Die Maus hat die Smart-Reel-Empfindlichkeit anders zurückgemeldet.")
+    except OSError:
+        # A profile write can also update the live level, so restore both banks.
+        for bank, previous in levels.items():
+            arguments = bytes((bank, previous))
+            try:
+                scroll_feature_report(device, 0x02, 0x23, arguments, arguments)
+            except OSError as exc:
+                logging.warning("Smart-Reel-Stufe wiederherstellen: %s", exc)
+        raise
+
+
 @dataclass(frozen=True)
 class Reading:
     battery: int
@@ -165,6 +199,7 @@ class Settings:
     scroll_cycle: int | None = None
     scroll_cycle_cached: bool = False
     wired: bool = False
+    smart_reel_level: int | None = None
 
 
 @dataclass(frozen=True)
@@ -211,7 +246,7 @@ class MouseWorker(QObject):
 
     def set_scroll_cycle(self, profile, cycle):
         if cycle not in SCROLL_CYCLES:
-            raise ScrollModeError("Wähle mindestens zwei Modi für die Umschalttaste.")
+            raise ScrollModeError("Wähle mindestens zwei Modi zum Umschalten.")
         with open_scroll_device(self.mouse.serial, self.product_id) as device:
             if active_scroll_profile(device) != profile:
                 raise ScrollModeError("Das Mausprofil wurde gewechselt. Wähle die Modi erneut.")
@@ -219,6 +254,16 @@ class MouseWorker(QObject):
         preferences = QSettings("BasiliskV4Tray", "BasiliskV4Tray")
         preferences.setValue(self.scroll_cycle_key(profile), cycle)
         preferences.sync()
+
+    def set_smart_reel_level(self, wired, profile, level):
+        if (self.product_id == BASILISK_WIRED) != wired:
+            raise ScrollModeError("Die Verbindung wurde gewechselt. Öffne die Einstellungen erneut.")
+        if level not in SMART_REEL_LEVELS:
+            raise ScrollModeError("Wähle eine Smart-Reel-Stufe von 1 bis 5.")
+        with open_scroll_device(self.mouse.serial, self.product_id) as device:
+            if active_scroll_profile(device) != profile:
+                raise ScrollModeError("Das Mausprofil wurde gewechselt. Wähle die Smart-Reel-Stufe erneut.")
+            write_smart_reel_level(device, profile, level)
 
     def read(self, refresh_battery=False):
         product_id = next((pid for pid in (BASILISK_WIRED, BASILISK_RECEIVER)
@@ -266,7 +311,7 @@ class MouseWorker(QObject):
 
     def set_scroll_mode(self, mode, cycle=None):
         if cycle is not None and not cycle & (1 << mode):
-            raise ScrollModeError("Wähle den gewünschten Modus zuerst unter Umschalttaste aus.")
+            raise ScrollModeError(f"Wähle den gewünschten Modus zuerst unter „{SCROLL_CYCLE_LABEL}“ aus.")
         self.mouse.scroll_mode = mode
         sleep(0.5)
         if self.mouse.scroll_mode == mode:
@@ -319,11 +364,11 @@ class MouseWorker(QObject):
                 pass  # Ordinary OpenRazer controls can work without hidraw access.
         if needs_free_spin and (cycle is None or not cycle & (1 << FREE_SPIN)):
             raise ScrollModeError(
-                "Smart Reel braucht am USB-Kabel Freilauf. Wähle unter Umschalttaste "
-                "eine Auswahl mit Freilauf oder schalte Smart Reel aus."
+                f"Smart Reel braucht am USB-Kabel Freilauf. Wähle unter „{SCROLL_CYCLE_LABEL}“ "
+                "eine Kombination mit Freilauf oder schalte Smart Reel aus."
             )
         if cycle_edit is not None and mode is not None and not cycle & (1 << mode):
-            raise ScrollModeError("Wähle einen Modus aus, der zur Umschalttaste gehört.")
+            raise ScrollModeError(f"Wähle einen der unter „{SCROLL_CYCLE_LABEL}“ erlaubten Modi.")
 
         dpi = changes.get("dpi", current.dpi)
         stage = changes.get("stage", min(max(current.stage, 1), len(dpi)))
@@ -350,6 +395,8 @@ class MouseWorker(QObject):
             self.set_scroll_mode(mode, cycle)
         if "scroll_acceleration" in scroll:
             mouse.scroll_acceleration = scroll["scroll_acceleration"]
+        if "smart_reel_level" in changes:
+            self.set_smart_reel_level(*changes["smart_reel_level"])
         if smart_reel is True:
             mouse.scroll_smart_reel = True
         for name, edits in changes.get("lights", {}).items():
@@ -391,15 +438,23 @@ class MouseWorker(QObject):
                     lights[name] = Light.read(zone)
             scroll = {key: getattr(self.mouse, key) for key in SCROLL_SETTINGS if self.mouse.has(key)}
             profile, cycle, cached = None, None, False
+            smart_reel_level = None
             if "scroll_mode" in scroll:
                 try:
                     profile, cycle, cached = self.read_scroll_cycle()
                 except OSError as exc:
-                    logging.debug("Modi der Umschalttaste lesen: %s", exc)
+                    logging.debug("Modi beim Umschalten lesen: %s", exc)
+            if profile is not None and "scroll_smart_reel" in scroll:
+                try:
+                    with open_scroll_device(self.mouse.serial, self.product_id) as device:
+                        smart_reel_level = read_smart_reel_level(device, 0)
+                except OSError as exc:
+                    logging.debug("Smart-Reel-Empfindlichkeit lesen: %s", exc)
             state = Settings(reading, self.mouse.max_dpi, tuple(self.mouse.supported_poll_rates),
                              self.mouse.get_low_battery_threshold(), self.mouse.get_idle_time(),
                              lights, scroll, profile, cycle, cached,
-                             wired=self.product_id == BASILISK_WIRED)
+                             wired=self.product_id == BASILISK_WIRED,
+                             smart_reel_level=smart_reel_level)
             self.updated.emit(reading)
         except DEVICE_ERRORS as exc:
             logging.warning("Einstellungen lesen: %s", exc)
@@ -408,7 +463,8 @@ class MouseWorker(QObject):
             return
 
         actual = {"dpi": reading.dpi, "stage": reading.stage, "polling": reading.polling,
-                  "threshold": state.threshold, "idle": state.idle}
+                  "threshold": state.threshold, "idle": state.idle,
+                  "smart_reel_level": (state.wired, profile, smart_reel_level)}
         if changes and not error:
             changed_values = ((actual[key], value) for key, value in changes.items()
                               if key not in ("lights", "scroll", "scroll_cycle"))
@@ -612,20 +668,26 @@ class SettingsDialog(QDialog):
         scroll = QFormLayout(self.scroll_page)
         self.scroll_mode = ScrollModeComboBox()
         self.scroll_cycle = ScrollModeComboBox()
+        self.scroll_cycle.setToolTip("Legt fest, welche Modi die bereits belegte Taste durchläuft.")
         self.scroll_cycle_note = QLabel()
         self.scroll_cycle_note.setWordWrap(True)
         self.scroll_acceleration = QCheckBox("Scrollbeschleunigung aktivieren")
         self.scroll_smart_reel = QCheckBox("Smart Reel aktivieren")
         self.scroll_smart_reel.setToolTip("Wechselt bei schnellem Scrollen automatisch in den Freilauf.")
-        self.scroll_smart_reel_note = QLabel("Am USB-Kabel braucht Smart Reel eine Umschalttaste mit Freilauf.")
+        self.scroll_smart_reel_level = ScrollModeComboBox()
+        self.scroll_smart_reel_level.setToolTip("Legt fest, wie empfindlich Smart Reel auf schnelles Drehen reagiert.")
+        self.scroll_smart_reel_note = QLabel(
+            f"Am USB-Kabel muss unter „{SCROLL_CYCLE_LABEL}“ Freilauf ausgewählt sein."
+        )
         self.scroll_smart_reel_note.setWordWrap(True)
         self.scroll_unavailable = QLabel("OpenRazer meldet keine Scrollrad-Einstellungen für diese Maus.")
         self.scroll_unavailable.setWordWrap(True)
         scroll.addRow("Modus", self.scroll_mode)
-        scroll.addRow("Umschalttaste", self.scroll_cycle)
+        scroll.addRow(SCROLL_CYCLE_LABEL, self.scroll_cycle)
         scroll.addRow(self.scroll_cycle_note)
         scroll.addRow(self.scroll_acceleration)
         scroll.addRow(self.scroll_smart_reel)
+        scroll.addRow("Smart-Reel-Empfindlichkeit", self.scroll_smart_reel_level)
         scroll.addRow(self.scroll_smart_reel_note)
         scroll.addRow(self.scroll_unavailable)
         self.scroll_unavailable.hide()
@@ -701,7 +763,19 @@ class SettingsDialog(QDialog):
             controls.load(state.lights.get(name))
         self.load_scroll(state.scroll)
         self.load_scroll_cycle(state)
-        self.scroll_smart_reel_note.setVisible(state.wired and "scroll_smart_reel" in state.scroll)
+        has_smart_reel = "scroll_smart_reel" in state.scroll
+        self.scroll_smart_reel_note.setVisible(state.wired and has_smart_reel)
+        level = self.scroll_smart_reel_level
+        self.scroll_page.layout().labelForField(level).setVisible(has_smart_reel)
+        level.setVisible(has_smart_reel)
+        level.setEnabled(state.smart_reel_level is not None)
+        level.clear()
+        if state.smart_reel_level is None:
+            level.addItem("Nicht verfügbar", None)
+        else:
+            for value in SMART_REEL_LEVELS:
+                level.addItem(f"Stufe {value + 1}", value)
+            level.setCurrentIndex(level.findData(state.smart_reel_level))
 
     def load_scroll_cycle(self, state):
         self.scroll_cycle.clear()
@@ -711,7 +785,7 @@ class SettingsDialog(QDialog):
         self.scroll_cycle.setCurrentIndex(max(0, self.scroll_cycle.findData(state.scroll_cycle)))
         self.scroll_cycle.setEnabled(state.scroll_profile is not None)
         if state.scroll_profile is None:
-            note = "Die Umschalttaste benötigt Zugriff auf die USB-Steuerschnittstelle."
+            note = "Die Modiauswahl benötigt Zugriff auf die USB-Steuerschnittstelle."
         elif state.scroll_cycle_cached:
             note = "Zuletzt im Tray für das aktive Mausprofil gespeichert."
         elif state.scroll_cycle is None:
@@ -779,6 +853,9 @@ class SettingsDialog(QDialog):
         cycle = self.scroll_cycle.currentData()
         if state.scroll_profile is not None and cycle is not None and cycle != state.scroll_cycle:
             changes["scroll_cycle"] = state.scroll_profile, cycle
+        level = self.scroll_smart_reel_level.currentData()
+        if state.scroll_profile is not None and level is not None and level != state.smart_reel_level:
+            changes["smart_reel_level"] = state.wired, state.scroll_profile, level
         if not changes and self.tabs.currentIndex() == 0:
             changes["polling"] = self.polling.currentData()
         if changes:

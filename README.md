@@ -22,7 +22,7 @@ The packages on this page install the tray app and its desktop entries. Set up a
 Download the `.pkg.tar.zst` from [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases) and run this in the download directory:
 
 ```sh
-sudo pacman -U ./basilisk-v4-tray-0.1.4-1-any.pkg.tar.zst
+sudo pacman -U ./basilisk-v4-tray-0.1.5-1-any.pkg.tar.zst
 ```
 
 The tray package uses `python-openrazer` and the OpenRazer daemon already installed on the system. The [companion OpenRazer branch](https://github.com/ashrynsilkstone-ui/openrazer-basilisk-v4-pro/tree/basilisk-v4-pro-local) contains the driver and daemon changes tested with CachyOS.
@@ -40,7 +40,7 @@ sudo pacman -R basilisk-v4-tray
 Download the `.deb` from [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases), then run this in the download directory:
 
 ```sh
-sudo apt install ./basilisk-v4-tray_0.1.4_all.deb
+sudo apt install ./basilisk-v4-tray_0.1.5_all.deb
 ```
 
 The package supports the Qt libraries available on Debian 13 and Ubuntu 24.04 LTS or newer. On Ubuntu, enable the **Universe** repository if APT cannot find the Qt binding. A compatible OpenRazer installation provides `python3-openrazer`.
@@ -56,7 +56,7 @@ sudo apt remove basilisk-v4-tray
 Set up OpenRazer first using its [Fedora instructions](https://openrazer.github.io/#download). Fedora obtains `python3-openrazer` from the OpenRazer package repository. Download the `.rpm` from [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases), then run:
 
 ```sh
-sudo dnf install ./basilisk-v4-tray-0.1.4-1.noarch.rpm
+sudo dnf install ./basilisk-v4-tray-0.1.5-1.noarch.rpm
 ```
 
 To uninstall:

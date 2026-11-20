@@ -59,7 +59,9 @@ def scroll_feature_report(device, command_class, command, arguments, expected_pr
     for value in report[3:89]:
         report[89] ^= value
 
-    for _ in range(3):
+    for backoff in (0, 0.08, 0.15, 0.23, 0.32):
+        if backoff:
+            sleep(backoff)
         if ioctl(device, 0xC05B4806, report) not in (90, 91):  # HIDIOCSFEATURE(91)
             continue
         sleep(0.05)
@@ -199,19 +201,25 @@ class MouseWorker(QObject):
         sleep(0.5)
         if self.mouse.scroll_mode == mode:
             return
+        repair_error = None
         try:
             enable_scroll_modes(self.mouse.serial)
-        except PermissionError as exc:
+        except OSError as exc:
+            repair_error = exc
+        self.mouse.scroll_mode = mode
+        sleep(0.5)
+        if self.mouse.scroll_mode == mode:
+            return
+        if isinstance(repair_error, PermissionError):
             raise ScrollModeError(
                 "Der Tray hat keinen HID-Zugriff auf den Dongle. "
                 "Stecke den Dongle neu ein oder melde dich erneut an."
-            ) from exc
-        except OSError as exc:
-            raise ScrollModeError(f"Scrollradmodi konnten nicht freigegeben werden. {exc}") from exc
-        self.mouse.scroll_mode = mode
-        sleep(0.5)
-        if self.mouse.scroll_mode != mode:
-            raise ScrollModeError("Die Maus hat den gewählten Scrollradmodus erneut zurückgewiesen.")
+            ) from repair_error
+        if repair_error is not None:
+            raise ScrollModeError(
+                f"Scrollradmodi konnten nicht freigegeben werden. {repair_error}"
+            ) from repair_error
+        raise ScrollModeError("Die Maus hat den gewählten Scrollradmodus erneut zurückgewiesen.")
 
     def apply(self, current, changes):
         mouse = self.mouse

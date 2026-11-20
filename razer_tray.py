@@ -11,7 +11,7 @@ try:
     from PySide6.QtDBus import QDBus, QDBusAbstractAdaptor, QDBusConnection, QDBusMessage
     from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
     from PySide6.QtWidgets import (
-        QApplication, QColorDialog, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
+        QApplication, QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
         QGridLayout, QGroupBox, QHBoxLayout, QLabel, QMenu, QPushButton, QSpinBox,
         QSystemTrayIcon, QTabWidget, QVBoxLayout, QWidget,
     )
@@ -24,7 +24,7 @@ except ModuleNotFoundError as error:
     from PyQt6.QtDBus import QDBus, QDBusAbstractAdaptor, QDBusConnection, QDBusMessage
     from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
     from PyQt6.QtWidgets import (
-        QApplication, QColorDialog, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
+        QApplication, QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox, QFormLayout,
         QGridLayout, QGroupBox, QHBoxLayout, QLabel, QMenu, QPushButton, QSpinBox,
         QSystemTrayIcon, QTabWidget, QVBoxLayout, QWidget,
     )
@@ -39,6 +39,8 @@ DISCONNECTED = "Warte auf den HyperSpeed-Dongle …"
 DEFAULT_STAGES = (1200, 1600, 2400, 3200, 6400)
 LIGHT_ZONES = {"logo": "Logo", "scroll_wheel": "Scrollrad", "backlight": "Unterboden"}
 LIGHT_EFFECTS = {"none": "Aus", "static": "Statisch", "spectrum": "Farbwechsel", "wave": "Welle"}
+SCROLL_MODES = {0: "Rastend (24 Rastpunkte)", 2: "Rastend (48 Rastpunkte)", 1: "Freilauf"}
+SCROLL_SETTINGS = ("scroll_mode", "scroll_acceleration", "scroll_smart_reel")
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,7 @@ class Settings:
     threshold: int
     idle: int
     lights: dict[str, "Light"]
+    scroll: dict[str, int | bool]
 
 
 @dataclass(frozen=True)
@@ -145,6 +148,17 @@ class MouseWorker(QObject):
             mouse.set_low_battery_threshold(changes["threshold"])
         if "idle" in changes and changes["idle"] != mouse.get_idle_time():
             mouse.set_idle_time(changes["idle"])
+        scroll = changes.get("scroll", {})
+        for key in SCROLL_SETTINGS:
+            if key in scroll and not mouse.has(key):
+                raise ValueError(f"Scrollradeinstellung {key} ist nicht verfügbar.")
+        if scroll.get("scroll_smart_reel") is False:
+            mouse.scroll_smart_reel = False
+        for key in ("scroll_mode", "scroll_acceleration"):
+            if key in scroll:
+                setattr(mouse, key, scroll[key])
+        if scroll.get("scroll_smart_reel") is True:
+            mouse.scroll_smart_reel = True
         for name, edits in changes.get("lights", {}).items():
             zone = getattr(mouse.fx.misc, name)
             if zone is None:
@@ -179,8 +193,9 @@ class MouseWorker(QObject):
                 zone = getattr(self.mouse.fx.misc, name)
                 if zone is not None:
                     lights[name] = Light.read(zone)
+            scroll = {key: getattr(self.mouse, key) for key in SCROLL_SETTINGS if self.mouse.has(key)}
             state = Settings(reading, self.mouse.max_dpi, tuple(self.mouse.supported_poll_rates),
-                             self.mouse.get_low_battery_threshold(), self.mouse.get_idle_time(), lights)
+                             self.mouse.get_low_battery_threshold(), self.mouse.get_idle_time(), lights, scroll)
             self.updated.emit(reading)
         except DEVICE_ERRORS as exc:
             logging.warning("Einstellungen lesen: %s", exc)
@@ -191,10 +206,13 @@ class MouseWorker(QObject):
         actual = {"dpi": reading.dpi, "stage": reading.stage, "polling": reading.polling,
                   "threshold": state.threshold, "idle": state.idle}
         if changes and not error:
-            changed_values = ((actual[key], value) for key, value in changes.items() if key != "lights")
+            changed_values = ((actual[key], value) for key, value in changes.items()
+                              if key not in ("lights", "scroll"))
             changed_lights = ((getattr(lights.get(name), key, None), value)
                               for name, edits in changes.get("lights", {}).items() for key, value in edits.items())
-            if any(current != requested for current, requested in (*changed_values, *changed_lights)):
+            changed_scroll = ((scroll.get(key), value) for key, value in changes.get("scroll", {}).items())
+            if any(current != requested for current, requested in
+                   (*changed_values, *changed_lights, *changed_scroll)):
                 error = "Einige Werte wurden von der Maus anders zurückgemeldet. Die aktuellen Werte sind unten eingetragen."
         self.settings_ready.emit(state, error)
 
@@ -374,6 +392,22 @@ class SettingsDialog(QDialog):
             lighting.addWidget(controls)
         lighting.addStretch()
         self.tabs.addTab(self.lighting_page, "Beleuchtung")
+
+        self.scroll_page = QWidget()
+        scroll = QFormLayout(self.scroll_page)
+        self.scroll_mode = QComboBox()
+        self.scroll_acceleration = QCheckBox("Scrollbeschleunigung aktivieren")
+        self.scroll_smart_reel = QCheckBox("Smart Reel aktivieren")
+        self.scroll_smart_reel.setToolTip("Wechselt bei schnellem Scrollen automatisch in den Freilauf.")
+        self.scroll_unavailable = QLabel("OpenRazer meldet keine Scrollrad-Einstellungen für diese Maus.")
+        self.scroll_unavailable.setWordWrap(True)
+        scroll.addRow("Modus", self.scroll_mode)
+        scroll.addRow(self.scroll_acceleration)
+        scroll.addRow(self.scroll_smart_reel)
+        scroll.addRow(self.scroll_unavailable)
+        self.scroll_unavailable.hide()
+        self.tabs.addTab(self.scroll_page, "Scrollrad")
+
         self.message = QLabel()
         self.message.setWordWrap(True)
         self.message.hide()
@@ -392,6 +426,7 @@ class SettingsDialog(QDialog):
         self.sensor.setEnabled(enabled)
         self.power.setEnabled(enabled)
         self.lighting_page.setEnabled(enabled)
+        self.scroll_page.setEnabled(enabled)
         self.apply_button.setEnabled(enabled)
 
     def active_changed(self):
@@ -441,6 +476,26 @@ class SettingsDialog(QDialog):
         self.idle.setValue(state.idle)
         for name, controls in self.lights.items():
             controls.load(state.lights.get(name))
+        self.load_scroll(state.scroll)
+
+    def load_scroll(self, scroll):
+        form = self.scroll_page.layout()
+        mode_available = "scroll_mode" in scroll
+        form.labelForField(self.scroll_mode).setVisible(mode_available)
+        self.scroll_mode.setVisible(mode_available)
+        self.scroll_mode.clear()
+        if mode_available:
+            mode = scroll["scroll_mode"]
+            for value, label in SCROLL_MODES.items():
+                self.scroll_mode.addItem(label, value)
+            if mode not in SCROLL_MODES:
+                self.scroll_mode.addItem(f"Aktuell ({mode})", mode)
+            self.scroll_mode.setCurrentIndex(self.scroll_mode.findData(mode))
+        self.scroll_acceleration.setVisible("scroll_acceleration" in scroll)
+        self.scroll_acceleration.setChecked(scroll.get("scroll_acceleration", False))
+        self.scroll_smart_reel.setVisible("scroll_smart_reel" in scroll)
+        self.scroll_smart_reel.setChecked(scroll.get("scroll_smart_reel", False))
+        self.scroll_unavailable.setVisible(not scroll)
 
     def request(self, changes=None):
         self.busy = True
@@ -469,6 +524,15 @@ class SettingsDialog(QDialog):
         light_edits = {name: edits for name, controls in self.lights.items() if (edits := controls.changes())}
         if light_edits:
             changes["lights"] = light_edits
+        scroll_edits = {
+            key: value for key, value in (
+                ("scroll_mode", self.scroll_mode.currentData()),
+                ("scroll_acceleration", self.scroll_acceleration.isChecked()),
+                ("scroll_smart_reel", self.scroll_smart_reel.isChecked()),
+            ) if key in state.scroll and value != state.scroll[key]
+        }
+        if scroll_edits:
+            changes["scroll"] = scroll_edits
         if not changes and self.tabs.currentIndex() == 0:
             changes["polling"] = self.polling.currentData()
         if changes:

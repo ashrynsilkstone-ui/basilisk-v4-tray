@@ -335,6 +335,7 @@ class LightControls(QGroupBox):
         super().__init__(title)
         self.original = None
         self.color = (0, 255, 0)
+        self.color_confirmed = False
         self.effect = QComboBox()
         self.brightness = QSpinBox()
         self.brightness.setRange(0, 100)
@@ -372,10 +373,12 @@ class LightControls(QGroupBox):
         selected = QColorDialog.getColor(QColor(*self.color), self, f"Farbe · {self.title()}")
         if selected.isValid():
             self.color = selected.red(), selected.green(), selected.blue()
+            self.color_confirmed = True
             self.show_color()
 
     def load(self, light):
         self.original = light
+        self.color_confirmed = False
         self.setEnabled(light is not None)
         if light is None:
             self.effect.clear()
@@ -402,7 +405,7 @@ class LightControls(QGroupBox):
             changes["effect"] = effect
         if self.brightness.value() != original.brightness:
             changes["brightness"] = self.brightness.value()
-        if effect == "static" and self.color != original.color:
+        if effect == "static" and (self.color_confirmed or self.color != original.color):
             changes["color"] = self.color
         if effect == "wave" and self.direction.currentData() != original.direction:
             changes["direction"] = self.direction.currentData()

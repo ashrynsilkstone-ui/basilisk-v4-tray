@@ -6,7 +6,7 @@ Für **CachyOS mit KDE** gibt es ein natives Pacman-Paket und ein [PKGBUILD im R
 
 Die Tray-App zeigt Akkustand, aktive DPI-Stufe und Pollingrate einer Razer Basilisk V4 Pro am HyperSpeed-Dongle (`1532:00E3`). Die Zahl im Symbol steht für die DPI-Stufe, der Balken für den Akku. Im Tooltip und im Kontextmenü stehen alle drei Werte.
 
-Ein Klick auf das Symbol öffnet die Einstellungen. Dort kannst du bis zu fünf DPI-Stufen mit getrennten X- und Y-Werten bearbeiten, die aktive Stufe und Pollingrate wählen sowie Akku-Warnschwelle und Ruhezustand einstellen. Im Reiter **Beleuchtung** haben Logo, Scrollrad und Unterboden eigene Regler für Helligkeit und Effekt. Zur Auswahl stehen Aus, statische Farbe, Farbwechsel und Welle.
+Ein Klick auf das Symbol öffnet die Einstellungen. Dort kannst du bis zu fünf DPI-Stufen mit getrennten X- und Y-Werten bearbeiten, die aktive Stufe und Pollingrate wählen sowie Akku-Warnschwelle und Ruhezustand einstellen. Im Reiter **Beleuchtung** haben Logo, Scrollrad und Unterboden eigene Regler für Helligkeit und Effekt. Zur Auswahl stehen Aus, statische Farbe, Farbwechsel und Welle. Um eine statische Farbe erneut zu senden, bestätige sie im Farbdialog und klicke auf **Übernehmen**.
 
 Im Reiter **Scrollrad** kannst du zwischen Freilauf und 24 oder 48 Rastpunkten wählen. Außerdem kannst du die Scrollbeschleunigung und Smart Reel einstellen. Smart Reel wechselt bei schnellem Scrollen automatisch in den Freilauf. Die Einstellungen werden mit **Übernehmen** gesetzt. Weist die Maus einen Modus zurück, gibt der Tray alle drei Modi im aktiven Mausprofil frei und versucht es erneut. Die udev-Regel im Paket erlaubt der lokalen Desktop-Sitzung dafür Zugriff auf die Steuerschnittstelle des Dongles. Falls der Zugriff nach der Installation fehlt, stecke den Dongle neu ein.
 
@@ -22,7 +22,7 @@ Die Pakete auf dieser Seite installieren die Tray-App und ihre Desktop-Einträge
 Lade die `.pkg.tar.zst`-Datei unter [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases) herunter und führe im Downloadordner aus:
 
 ```sh
-sudo pacman -U ./basilisk-v4-tray-0.1.3-1-any.pkg.tar.zst
+sudo pacman -U ./basilisk-v4-tray-0.1.4-1-any.pkg.tar.zst
 ```
 
 Das Tray-Paket verwendet die installierte Python-Bibliothek `python-openrazer` und den vorhandenen OpenRazer-Daemon. Der [zugehörige OpenRazer-Zweig](https://github.com/ashrynsilkstone-ui/openrazer-basilisk-v4-pro/tree/basilisk-v4-pro-local) enthält die unter CachyOS getesteten Änderungen am Treiber und Daemon.
@@ -40,7 +40,7 @@ sudo pacman -R basilisk-v4-tray
 Lade die `.deb`-Datei unter [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases) herunter und führe im Downloadordner aus:
 
 ```sh
-sudo apt install ./basilisk-v4-tray_0.1.3_all.deb
+sudo apt install ./basilisk-v4-tray_0.1.4_all.deb
 ```
 
 Das Paket unterstützt die Qt-Bibliotheken aus Debian 13 und Ubuntu ab 24.04 LTS. Wenn APT unter Ubuntu das Qt-Binding nicht findet, aktiviere die Paketquelle **Universe**. Eine passende OpenRazer-Installation stellt `python3-openrazer` bereit.
@@ -56,7 +56,7 @@ sudo apt remove basilisk-v4-tray
 Richte OpenRazer zuerst nach der [Fedora-Anleitung](https://openrazer.github.io/#download) ein. Fedora bezieht `python3-openrazer` aus der OpenRazer-Paketquelle. Lade die `.rpm`-Datei unter [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases) herunter und führe aus:
 
 ```sh
-sudo dnf install ./basilisk-v4-tray-0.1.3-1.noarch.rpm
+sudo dnf install ./basilisk-v4-tray-0.1.4-1.noarch.rpm
 ```
 
 Deinstallation:

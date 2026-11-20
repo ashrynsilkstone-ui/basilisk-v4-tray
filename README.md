@@ -1,6 +1,8 @@
 # Basilisk V4 Pro Tray for KDE
 
-[Deutsch](README.de.md) · [Installation packages](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases)
+[Deutsch](README.de.md) · [CachyOS and Arch](#install-on-cachyos-or-arch-linux) · [Debian and Ubuntu](#install-on-debian-or-ubuntu) · [Fedora](#install-on-fedora) · [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases)
+
+**CachyOS KDE** has a native Pacman package and a [PKGBUILD in this repository](packaging/cachyos/PKGBUILD).
 
 See the battery level, active DPI stage and polling rate of a Razer Basilisk V4 Pro connected through its HyperSpeed receiver (`1532:00E3`). The number in the tray icon is the DPI stage and the bar is the battery level. Hover over the icon or open its context menu for all three readings.
 
@@ -13,12 +15,30 @@ Click the icon to open the settings. You can configure up to five DPI stages wit
 
 The packages on this page install the tray app and its desktop entries. Set up a compatible OpenRazer build for your distribution and confirm that it sees `1532:00E3` before using the tray. The [companion OpenRazer repository](https://github.com/ashrynsilkstone-ui/openrazer-basilisk-v4-pro) contains the receiver and underglow changes used to develop the app. See [OpenRazer's distribution instructions](https://openrazer.github.io/#download) for driver setup.
 
+## Install on CachyOS or Arch Linux
+
+Download the `.pkg.tar.zst` from [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases) and run this in the download directory:
+
+```sh
+sudo pacman -U ./basilisk-v4-tray-0.1.1-1-any.pkg.tar.zst
+```
+
+The tray package uses `python-openrazer` and the OpenRazer daemon already installed on the system. The [companion OpenRazer branch](https://github.com/ashrynsilkstone-ui/openrazer-basilisk-v4-pro/tree/basilisk-v4-pro-local) contains the driver and daemon changes tested with CachyOS.
+
+To build the Pacman package from this checkout, run `sh packaging/build-cachyos.sh` as your regular user. The script builds from the local source using [the CachyOS/Arch PKGBUILD](packaging/cachyos/PKGBUILD).
+
+To uninstall:
+
+```sh
+sudo pacman -R basilisk-v4-tray
+```
+
 ## Install on Debian or Ubuntu
 
 Download the `.deb` from [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases), then run this in the download directory:
 
 ```sh
-sudo apt install ./basilisk-v4-tray_0.1.0_all.deb
+sudo apt install ./basilisk-v4-tray_0.1.1_all.deb
 ```
 
 The package supports the Qt libraries available on Debian 13 and Ubuntu 24.04 LTS or newer. On Ubuntu, enable the **Universe** repository if APT cannot find the Qt binding. A compatible OpenRazer installation provides `python3-openrazer`.
@@ -34,7 +54,7 @@ sudo apt remove basilisk-v4-tray
 Set up OpenRazer first using its [Fedora instructions](https://openrazer.github.io/#download). Fedora obtains `python3-openrazer` from the OpenRazer package repository. Download the `.rpm` from [Releases](https://github.com/ashrynsilkstone-ui/basilisk-v4-tray/releases), then run:
 
 ```sh
-sudo dnf install ./basilisk-v4-tray-0.1.0-1.noarch.rpm
+sudo dnf install ./basilisk-v4-tray-0.1.1-1.noarch.rpm
 ```
 
 To uninstall:
@@ -45,7 +65,7 @@ sudo dnf remove basilisk-v4-tray
 
 ## Start the app and manage autostart
 
-Open **Basilisk V4 Pro** from the KDE application menu to start it immediately. Both packages add a KDE login autostart entry. Use **System Settings → Autostart** to turn it off.
+Open **Basilisk V4 Pro** from the KDE application menu to start it immediately. Each package adds a KDE login autostart entry. Use **System Settings → Autostart** to turn it off.
 
 A previous per-user installation can override the packaged desktop entries. If KDE still launches an older copy, check the entries named `local.razer.BasiliskTray.desktop` in `~/.config/autostart` and `~/.local/share/applications`.
 
@@ -59,9 +79,10 @@ python3 razer_tray.py
 
 Run `python3 install.py` to add a menu entry and autostart for the current user. It uses `$XDG_DATA_HOME` and `$XDG_CONFIG_HOME`, which default to `~/.local/share` and `~/.config`. On CachyOS and Arch, the dependencies are `pyside6`, `python-dbus` and `python-openrazer`.
 
-Build the packages locally from the repository root. The first command needs `dpkg-deb`, the second needs `rpmbuild` and GNU tar:
+Build from the repository root using the command for your distribution. The CachyOS build uses `makepkg` and GNU tar, the DEB build uses `dpkg-deb`, and the RPM build uses `rpmbuild` and GNU tar.
 
 ```sh
+sh packaging/build-cachyos.sh
 sh packaging/build-deb.sh
 sh packaging/build-rpm.sh
 ```
